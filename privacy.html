@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privacy · Spese MoneyManager</title>
+<meta name="robots" content="noindex">
+<style>
+  :root { --bg: #f4f5f2; --ink: #15202b; --ink-2: #4c5560; --accent: #1f4e79; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #0f1214; --ink: #f2f3f1; --ink-2: #c3c6c2; --accent: #8fb8e6; color-scheme: dark; } }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 65ch; margin: 0 auto; padding: 32px 16px 64px; }
+  h1 { font-size: 1.6rem; line-height: 1.2; margin: 0 0 4px; }
+  h2 { font-size: 1.1rem; margin: 28px 0 6px; }
+  p, li { color: var(--ink-2); }
+  a { color: var(--accent); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Informativa sulla privacy</h1>
+  <p>Spese MoneyManager · ultimo aggiornamento: 4 ottobre 2026</p>
+
+  <h2>Che cos'è</h2>
+  <p>Spese MoneyManager è un sito personale, senza server, che mostra le spese registrate con l'app Money Manager leggendone i backup dal Google Drive di chi lo usa. Non è un servizio offerto al pubblico.</p>
+
+  <h2>Quali dati usa</h2>
+  <ul>
+    <li><strong>Backup di Money Manager</strong> (file <code>.mmbak</code>) nella cartella scelta del tuo Google Drive: vengono letti e analizzati nel browser.</li>
+    <li><strong>Impostazioni del sito</strong> (divisione dello stipendio, obiettivi): sono salvate in un file nella cartella dati dell'app del tuo Google Drive, invisibile alle altre app.</li>
+    <li><strong>Copia locale</strong>: l'ultimo backup letto e il permesso di accesso a Google restano nella memoria del browser del tuo dispositivo.</li>
+  </ul>
+
+  <h2>Dove vanno i dati</h2>
+  <p>Da nessuna parte. Il sito comunica solo con Google (accesso e Google Drive). Non ci sono server, analisi statistiche, pubblicità né terze parti. I dati non vengono venduti, condivisi o trasferiti.</p>
+
+  <h2>Permessi Google</h2>
+  <ul>
+    <li><code>drive.readonly</code>: per leggere i backup. Il sito non può modificare né cancellare i tuoi file.</li>
+    <li><code>drive.appdata</code>: per salvare le impostazioni nella cartella dati dell'app.</li>
+  </ul>
+  <p>L'uso dei dati ricevuti dalle API di Google rispetta le <a href="https://developers.google.com/terms/api-services-user-data-policy">norme sui dati utente dei servizi API di Google</a>, compresi i requisiti di uso limitato.</p>
+
+  <h2>Come revocare l'accesso</h2>
+  <p>Nel sito: Impostazioni → Esci da Google. Oppure da <a href="https://myaccount.google.com/permissions">myaccount.google.com/permissions</a>. Per cancellare la copia locale basta cancellare i dati del sito dal browser.</p>
+
+  <h2>Contatti</h2>
+  <p>Per domande scrivi all'indirizzo email indicato come contatto nella schermata di accesso di Google.</p>
+
+  <p><a href="./">Torna al sito</a></p>
+</main>
+</body>
+</html>
