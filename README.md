@@ -71,14 +71,15 @@ Apri il sito con Chrome su Android → menu ⋮ → **Installa app** (o *Aggiung
 
 | File | Cosa fa |
 |---|---|
-| `index.html` | La pagina, con le quattro schede e le impostazioni |
+| `index.html` | La pagina e la grafica: le schede Mese, Andamento, Medie, Movimenti e Impostazioni |
 | `privacy.html` | L'informativa sulla privacy richiesta da Google |
-| `js/core.js` | I calcoli: contenitori, giacenze, analisi, anno per anno |
+| `js/core.js` | I calcoli: contenitori, giacenze, analisi, anno per anno, mese per mese |
 | `js/drive.js` | L'accesso a Google e le chiamate a Drive |
 | `js/app.js` | L'interfaccia |
+| `js/charts.js` | I grafici (SVG, senza librerie esterne) |
 | `config.js` | Il Client ID di Google |
 | `sw.js`, `manifest.webmanifest`, `icons/` | Installazione sul telefono e funzionamento offline |
-| `vendor/` | Le librerie usate: [sql.js](https://github.com/sql-js/sql.js) per leggere i backup, [Chart.js](https://www.chartjs.org) per i grafici |
+| `vendor/` | [sql.js](https://github.com/sql-js/sql.js) per leggere i backup e il carattere [Mona Sans](https://github.com/github/mona-sans) (licenza OFL), salvati qui così il sito funziona anche offline |
 
 - **Accesso**: il sito chiede a Google un permesso valido un'ora. Quando scade, lo rinnova da solo se sei ancora collegato a Google nel browser. Il permesso resta solo sul tuo dispositivo.
 - **Permessi richiesti**: lettura dei file di Drive (`drive.readonly`) e la cartella nascosta dell'app (`drive.appdata`). Il sito non può modificare né cancellare i tuoi file.

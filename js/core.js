@@ -320,4 +320,66 @@ var MM = (function () {
     ledger: ledger, detail: detail, analysis: analysis, yearly: yearly, pickLatest: pickLatest, ruleAt: ruleAt, sortedRules: sortedRules,
     scope: scope, salaryMonth: salaryMonth, monthLabel: monthLabel, monthLong: monthLong, addMonths: addMonths, monthRange: monthRange, containerOf: containerOf, isInvest: isInvest, round2: round2 };
 })();
+
+/* ---------- Extra calculations for the charts. They only read the results above and never change them. ---------- */
+(function (MM) {
+  function sum(a, f) { return a.reduce(function (s, x) { return s + (f ? f(x) : x); }, 0); }
+
+  /* Salary to expect for a month whose salary has not arrived yet: the median of the last six real salaries
+     (so a 13th or 14th month does not skew it); before the first real salary, the estimate in the settings. */
+  MM.expectedIncome = function (led, settings) {
+    var real = led.rows.filter(function (r) { return r.kind === "real"; }).map(function (r) { return r.income; }).slice(-6)
+      .sort(function (a, b) { return a - b; });
+    if (real.length) { var n = real.length, h = Math.floor(n / 2); return { income: n % 2 ? real[h] : (real[h - 1] + real[h]) / 2, from: "real" }; }
+    var est = +((settings || {}).estimate) || 0;
+    return { income: est, from: est ? "est" : null };
+  };
+
+  /* The quota a container would get in a month from the expected salary (same rule as the ledger) */
+  MM.expectedQuota = function (led, settings, month, c) {
+    var rule = MM.ruleAt((settings || MM.DEFAULT_SETTINGS).rules, month);
+    var q = MM.expectedIncome(led, settings).income * (+rule[c] || 0) / 100;
+    if (c === "inv") q *= 1 - (+rule.liq || 0) / 100;
+    return q;
+  };
+
+  /* Spending month by month, per container and per subcategory, read from the ledger so every sum matches it
+     (investments use the other app's totals where they are set). Averages count closed months only, like the analysis. */
+  MM.monthly = function (led, months, cur) {
+    var byMonth = {};
+    led.rows.forEach(function (r) { byMonth[r.month] = r; });
+    var closed = months.filter(function (m) { return m < cur; });
+    var nClosed = Math.max(closed.length, 1);
+    var cont = {}, subs = {};
+    MM.CONTAINERS.forEach(function (c) { cont[c] = { spent: {}, quota: {}, avg: 0, quotaAvg: 0, total: 0 }; });
+    function add(c, key, macro, sub, m, amount) {
+      if (!subs[key]) subs[key] = { key: key, macro: macro, sub: sub, container: c, m: {}, total: 0, closedTotal: 0, n: 0 };
+      var s = subs[key];
+      s.m[m] = (s.m[m] || 0) + amount; s.total += amount; s.n += 1;
+      if (m < cur) s.closedTotal += amount;
+    }
+    var kind = {};
+    months.forEach(function (m) {
+      var r = byMonth[m];
+      kind[m] = r ? r.kind : null;
+      MM.CONTAINERS.forEach(function (c) {
+        var cc = r ? r.c[c] : null;
+        cont[c].spent[m] = cc ? cc.spent : 0;
+        cont[c].quota[m] = cc ? cc.quota : 0;
+        cont[c].total += cont[c].spent[m];
+        if (!cc) return;
+        if (cc.hist) add(c, "hist", "Investimenti", "Altra app", m, cc.spent);
+        else cc.items.forEach(function (e) { add(c, e.key, e.macro, e.sub, m, e.amount); });
+      });
+    });
+    var withQuota = closed.filter(function (m) { return kind[m] === "real" || kind[m] === "est"; });
+    MM.CONTAINERS.forEach(function (c) {
+      cont[c].avg = closed.length ? sum(closed, function (m) { return cont[c].spent[m]; }) / nClosed : cont[c].total;
+      cont[c].quotaAvg = withQuota.length ? sum(withQuota, function (m) { return cont[c].quota[m]; }) / withQuota.length : 0;
+    });
+    var list = Object.keys(subs).map(function (k) { var s = subs[k]; s.avg = closed.length ? s.closedTotal / nClosed : s.total; return s; })
+      .sort(function (a, b) { return b.total - a.total; });
+    return { months: months, closed: closed, kind: kind, cont: cont, subs: list };
+  };
+})(MM);
 if (typeof module !== "undefined") module.exports = MM;
