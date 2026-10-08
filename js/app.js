@@ -633,13 +633,15 @@
   var PLACE_TYPE = { exchange: "Exchange", wallet: "Hardware wallet", app: "App di pagamento", manuale: "Inserito a mano" };
   /* The PC file plus what is typed on this site (for apps that cannot be read, like Kast) */
   function pfDoc() { return PF.withManual(state.pf.doc, settings.pfManual); }
+  /* The same without the currencies counted as a bank account (Impostazioni › Patrimonio), and those apart */
+  function pfSplit() { return PF.splitBank(pfDoc(), (settings.wealth || {}).asBank); }
   function parseQty(v) {
     var t = String(v || "").replace(/\s|'/g, "");
     if (t.indexOf(",") >= 0) t = t.replace(/\./g, "").replace(",", ".");
     var n = parseFloat(t);
     return isFinite(n) ? n : null;
   }
-  function pfRender() { if (!state.data) return; if (state.view === "crypto") renderCrypto(); else if (state.view === "patrimonio") renderWealth(); }
+  function pfRender() { if (!state.data) return; if (state.view === "crypto") renderCrypto(); else if (state.view === "patrimonio") renderWealth(); else if (state.view === "impostazioni") renderFiatSettings(); }
   function hideSmall() { return load(SMALL_KEY) !== "0"; }
   function setPortfolio(doc, file) { state.pf.doc = doc; state.pf.file = file; state.pf.err = null; PF.cache(doc, file); }
 
@@ -734,7 +736,7 @@
     if (c.where.some(function (w) { return w.qty < 0; })) h += '<p class="pf-det-n">Le quantità con il meno sono debito della carta: spese fatte a credito da restituire.</p>';
     return h;
   }
-  function placeDetails(p) {
+  function placeDetails(p, moved) {
     var h = p.accounts.map(function (a) {
       return '<div class="pf-w"><span>' + esc(a.name) + "</span><b>" + money(a.value) + "</b>" +
         "<small>" + accountLine(a, p.type) + (a.error ? " · " + esc(a.error) : "") + "</small></div>";
@@ -743,6 +745,9 @@
       return '<div class="pf-w pf-w-c"><span>' + esc(c.sym) + " <small>" + qty(c.qty) + "</small></span><b>" + money(c.value) + "</b></div>";
     }).join("");
     if (p.type === "manuale") h += '<p class="pf-det-n">Le hai scritte tu: per cambiarle usa "Inseriti a mano" qui sotto.</p>';
+    (moved || []).forEach(function (b) {
+      if (b.place === p.id) h += '<p class="pf-det-n">Fuori da qui: ' + qty(b.qty) + " " + esc(b.sym) + ", contati come conto in banca nella scheda Patrimonio.</p>";
+    });
     return h;
   }
 
@@ -751,7 +756,7 @@
   function renderCrypto() {
     if (pfEditing()) { state.pf.dirty = true; return; }
     state.pf.dirty = false;
-    var pf = state.pf, box = $("pfBody"), doc = pfDoc();
+    var pf = state.pf, box = $("pfBody"), split = pfSplit(), doc = split.doc;
     K.cur = pfCur(); syncCurButtons();
     if (!doc) {
       $("pfFresh").textContent = "";
@@ -799,7 +804,7 @@
       var row = '<span class="pf-l"><b>' + esc(p.name) + "</b><small>" + placeSub(p) + "</small></span>" +
         '<span class="pf-r"><b>' + money(p.value) + "</b><small>" + share(p.pct) + "</small></span>" + CHEV +
         '<span class="bar" aria-hidden="true"><i style="width:' + (Math.max(0, p.pct) * 100).toFixed(2) + '%"></i></span>';
-      return pfItem("p:" + p.id, row, placeDetails(p));
+      return pfItem("p:" + p.id, row, placeDetails(p, split.bank));
     }).join("") + "</div></div>";
 
     h += '<label class="switch card" for="pfSmall" style="padding:12px 16px">Nascondi le monete sotto 1 ' + sym1() + '<input type="checkbox" id="pfSmall"' + (small ? " checked" : "") + "></label>";
@@ -817,6 +822,8 @@
     if (noRate) notes.push([ICON_INFO, "Il cambio euro/dollaro non è ancora disponibile: mostro i dollari finché non arrivano i prezzi."]);
     if (pf.priceErr && R.coins.length) notes.push([ICON_INFO, (pf.priceErr === "offline" ? "Sei offline" : pf.priceErr === "limit" ? "CoinGecko ha rifiutato la richiesta per troppi accessi" : "Non riesco a prendere i prezzi da CoinGecko") + ": uso " + (R.liveCount ? "gli ultimi prezzi presi su questo dispositivo" : "quelli dell'ultimo aggiornamento del PC") + "."]);
     else if (R.snapCount && R.liveCount) notes.push([ICON_INFO, R.snapCount === 1 ? "1 moneta usa il prezzo dell'ultimo aggiornamento del PC." : R.snapCount + " monete usano il prezzo dell'ultimo aggiornamento del PC."]);
+    if (split.bank.length) notes.push([ICON_INFO, "Non contati qui: " + split.bank.map(function (b) { return qty(b.qty) + " " + esc(b.sym) + " su " + esc(b.placeName); }).join(", ") +
+      ". Li conti come conto in banca, nella scheda Patrimonio. Lo cambi in Impostazioni › Patrimonio."]);
     if (pf.err) notes.push([ICON_INFO, esc(pf.err) + " Mostro l'ultima copia."]);
     if (pf.file && pf.file.via === "file") notes.push([ICON_INFO, "Stai guardando un file aperto a mano (" + esc(pf.file.name || PF_FILE) + "). Al prossimo aggiornamento da Drive torna quello del PC."]);
     notes.push([ICON_INFO, "Prezzi da CoinGecko, presi ogni volta che apri questa pagina. Per gli euro uso il cambio di USDT."]);
@@ -865,7 +872,7 @@
   function shortDate(d) { return d ? new Date(d.length > 10 ? d : d + "T12:00:00").toLocaleDateString("it-IT", { day: "numeric", month: "short" }) : ""; }
 
   function wealthData() {
-    var pf = state.pf, doc = pfDoc(), w = wSet();
+    var pf = state.pf, split = pfSplit(), doc = split.doc, w = wSet();
     var R = doc ? PF.compute(doc, pf.prices) : null;
     var rate = (R && R.eurUsd) || (pf.prices && pf.prices.eurUsd) || (pf.doc && pf.doc.eur_usd) || null;
     var bk = PF.banks(state.rows, w, (pf.doc && pf.doc.ricariche) || [], today());
@@ -874,7 +881,11 @@
     var etf = et.reduce(function (t, e) { return t + e.value; }, 0);
     var P = bk.banks.poste, F = bk.banks.fineco;
     var coins = R && rate ? R.coins.filter(function (c) { return Math.abs(c.value / rate) >= 0.5; }).map(function (c) { return { label: c.sym, value: c.value / rate }; }) : [];
-    return { R: R, rate: rate, bk: bk, et: et, crypto: crypto, etf: etf, coins: coins, total: crypto + etf + (bk.set ? P.value + F.value : 0) };
+    // currencies on an exchange counted as a bank account (for example the euros parked on OKX)
+    var ex = split.bank.map(function (b) { b.eur = PF.fiatEur(doc, pf.prices, b.sym, b.qty, rate); return b; });
+    var exTot = ex.reduce(function (t, b) { return t + (b.eur || 0); }, 0);
+    var conti = (bk.set ? P.value + F.value : 0) + exTot;
+    return { R: R, rate: rate, bk: bk, et: et, crypto: crypto, etf: etf, coins: coins, ex: ex, exTot: exTot, conti: conti, total: crypto + etf + conti };
   }
 
   /* A donut: one path per slice, a 2px surface gap between them */
@@ -924,13 +935,16 @@
 
     var other = D.rate ? (WK.cur === "eur" ? usd0(D.total * D.rate) : eur0.format(D.total)) : null;
     var h = '<div class="card pf-hero"><span class="lbl">In tutto</span><b class="big">' + wm0(D.total) + "</b>" +
-      '<span class="sub">' + (other ? "<span>circa " + other + "</span>" : "") + "<span>Conti <b>" + wm0(bk.set ? P.value + F.value : 0) + "</b></span><span>Investito <b>" + wm0(D.crypto + D.etf) + "</b></span></span></div>";
+      '<span class="sub">' + (other ? "<span>circa " + other + "</span>" : "") + "<span>Conti <b>" + wm0(D.conti) + "</b></span><span>Investito <b>" + wm0(D.crypto + D.etf) + "</b></span></span></div>";
 
     // the donut: what you have by kind, then inside one kind
-    var top = [{ key: "conti", label: "Conti", value: bk.set ? P.value + F.value : 0, color: "var(--s1)", note: bk.set ? "" : "da scrivere" },
+    var top = [{ key: "conti", label: "Conti", value: D.conti, color: "var(--s1)", note: bk.set ? "" : "da scrivere" },
       { key: "etf", label: "ETF", value: D.etf, color: "var(--s2)" }, { key: "crypto", label: "Crypto", value: D.crypto, color: "var(--s3)" }];
     var lvl = W.level, slices, title, mid, midLabel;
-    if (lvl === "conti") { slices = [{ label: "Poste", value: P.value, color: SLOTS[0] }, { label: "Fineco", value: F.value, color: SLOTS[1] }]; title = "Conti"; }
+    if (lvl === "conti") {
+      slices = [{ label: "Poste", value: P.value }, { label: "Fineco", value: F.value }].concat(D.ex.map(function (b) { return { label: b.placeName, note: b.sym, value: b.eur || 0 }; }));
+      slices.forEach(function (x, i) { x.color = SLOTS[i % SLOTS.length]; }); title = "Conti";
+    }
     else if (lvl === "etf") { slices = topN(D.et.map(function (e) { return { label: e.name, value: e.value }; }), 6, "ETF"); title = "ETF"; }
     else if (lvl === "crypto") { slices = topN(D.coins, 6, "monete"); title = "Crypto"; }
     else { slices = top; title = "Dove sono"; lvl = null; }
@@ -940,9 +954,18 @@
       '<h2 class="h">' + title + "</h2></div>" + donut(slices, mid, midLabel, !lvl) + legend(slices, tot, !lvl) +
       '<p class="small">' + (lvl ? (lvl === "crypto" ? 'Il dettaglio di ogni moneta è nella scheda <button type="button" class="linkbtn" data-w="open-crypto">Crypto</button>.' : "Tocca \"Tutto\" per tornare indietro.") : "Tocca una fetta per vedere com'è divisa.") + "</p></div>";
 
-    // bank accounts, each with how it was calculated
+    // bank accounts, each with how it was calculated; then the currencies parked on an exchange
+    var exRows = D.ex.map(function (b) {
+      var bad = b.accounts.filter(function (a) { return a.status !== "ok"; }), last = b.accounts.map(function (a) { return a.when; }).filter(Boolean).sort().slice(-1)[0];
+      var row = '<span class="pf-l"><b>' + esc(b.placeName) + "</b><small>" + (bad.length ? pfFlag("non letto: valori di " + when(last), true) : esc(b.sym) + " · letto " + esc(when(last))) + "</small></span>" +
+        '<span class="pf-r"><b>' + (b.eur !== null ? wm2(b.eur) : "—") + "</b><small>" + (D.total > 0 && b.eur > 0 ? share(b.eur / D.total) : "") + "</small></span>" + CHEV;
+      var det = '<div class="w-calc">' + b.accounts.map(function (a) { return "<div><span>" + esc(b.sym) + " su " + esc(b.placeName) + " › " + esc(a.name) + "</span><b>" + qty(a.qty) + " " + esc(b.sym) + "</b></div>"; }).join("") +
+        '<div class="tot"><span>Saldo di oggi</span><b>' + (b.eur !== null ? wm2(b.eur) : "—") + "</b></div></div>" +
+        '<p class="pf-det-n">Letto dal programma sul PC. Lo conto come conto in banca e non come crypto: lo cambi in <button type="button" class="linkbtn" data-w="setup-fiat">Impostazioni › Patrimonio</button>.</p>';
+      return pfItem("w:x:" + b.key, row, det);
+    }).join("");
     h += '<div class="block"><h2 class="h">Conti</h2>';
-    if (!bk.set) h += '<div class="card group"><p>Scrivi una volta i saldi di Poste e Fineco di una sera: da lì il sito aggiunge gli stipendi, toglie le spese, sposta il giroconto del mese e toglie le ricariche di ether.fi.</p><div class="btnrow"><button type="button" class="btn small primary" data-w="setup">Scrivi i saldi</button></div></div>';
+    if (!bk.set) h += (exRows ? '<div class="card pf-list" style="margin-bottom:10px">' + exRows + "</div>" : "") + '<div class="card group"><p>Scrivi una volta i saldi di Poste e Fineco di una sera: da lì il sito aggiunge gli stipendi, toglie le spese, sposta il giroconto del mese e toglie le ricariche di ether.fi.</p><div class="btnrow"><button type="button" class="btn small primary" data-w="setup">Scrivi i saldi</button></div></div>';
     else {
       var since = "dal " + shortDate(bk.from);
       var pRows = '<div class="w-calc"><div><span>Saldo del ' + shortDate(bk.from) + "</span><b>" + wm2(P.start) + "</b></div>" +
@@ -967,7 +990,7 @@
         return '<span class="pf-l"><b>' + name + "</b><small>Calcolato " + since + '</small></span><span class="pf-r"><b class="' + (B.value < 0 ? "neg" : "") + '">' + wm2(B.value) + "</b><small>" +
           (D.total > 0 ? share(Math.max(0, B.value) / D.total) : "") + "</small></span>" + CHEV;
       };
-      h += '<div class="card pf-list">' + pfItem("w:poste", accRow("Poste", P), pRows) + pfItem("w:fineco", accRow("Fineco", F), fRows) + "</div>";
+      h += '<div class="card pf-list">' + pfItem("w:poste", accRow("Poste", P), pRows) + pfItem("w:fineco", accRow("Fineco", F), fRows) + exRows + "</div>";
     }
     h += "</div>";
 
@@ -989,6 +1012,7 @@
     var notes = [];
     if (bk.set && (P.value < 0 || F.value < 0)) notes.push([ICON_WARN, "Un saldo calcolato è sotto zero: probabilmente manca un movimento. Aggiorna i saldi di partenza in Impostazioni."]);
     if (D.R && !D.rate) notes.push([ICON_WARN, "Il cambio euro/dollaro non è disponibile: le crypto non sono nel totale finché non arrivano i prezzi."]);
+    if (D.ex.some(function (b) { return b.eur === null; })) notes.push([ICON_WARN, "Una valuta contata come conto non ha ancora il cambio in euro: è fuori dal totale."]);
     if (!state.pf.doc) notes.push([ICON_INFO, "Le crypto arrivano dal programma sul PC (patrimonio.json): finché non c'è, conto solo quelle inserite a mano."]);
     if (D.et.some(function (e) { return e.qty && e.priceEur === null; })) notes.push([ICON_INFO, "Un ETF non ha ancora un prezzo in euro: è fuori dal totale."]);
     if (noRate) notes.push([ICON_INFO, "Mostro gli euro finché non arriva il cambio con il dollaro."]);
@@ -997,8 +1021,21 @@
     box.innerHTML = h;
   }
 
+  /* Currencies on the exchanges: tick one to count it as a bank account instead of crypto */
+  function renderFiatSettings() {
+    var box = $("wFiat"); if (!box) return;
+    var on = wSet().asBank || {}, spots = PF.fiatSpots(pfDoc()), seen = {};
+    spots.forEach(function (x) { seen[x.key] = 1; });
+    Object.keys(on).forEach(function (k) { if (on[k] && !seen[k]) { var i = k.lastIndexOf("|"); spots.push({ key: k, placeName: k.slice(0, i), sym: k.slice(i + 1), qty: 0, accounts: [], gone: true }); } });
+    box.innerHTML = spots.length ? spots.map(function (x, i) {
+      return '<label class="switch w-fiat" for="wf' + i + '"><span>' + esc(x.placeName) + " · " + esc(x.sym) + "<small>" + (x.gone ? "Non c'è più nel file del PC" : qty(x.qty) + " " + esc(x.sym) + " · " + esc(x.accounts.join(", "))) + "</small></span>" +
+        '<input type="checkbox" id="wf' + i + '" data-bank="' + esc(x.key) + '"' + (on[x.key] ? " checked" : "") + "></label>";
+    }).join("") : '<p class="small">' + (state.pf.doc ? "Nessun euro o dollaro sugli exchange." : "Compaiono quando arriva il file del programma sul PC.") + "</p>";
+  }
+
   /* Patrimonio settings, in Impostazioni */
   function renderWealthSettings() {
+    renderFiatSettings();
     var w = wSet(), g = w.giro || {};
     $("wDate").value = w.date || ""; $("wPoste").value = w.date ? (+w.poste || 0) : ""; $("wFineco").value = w.date ? (+w.fineco || 0) : "";
     $("wGiro").value = g.amount !== undefined ? g.amount : ""; $("wGiroDay").value = g.day || 15; $("wFee").value = w.fee !== undefined ? w.fee : "";
@@ -1103,6 +1140,7 @@
     else if (k === "conti" || k === "etf" || k === "crypto") { W.level = k; renderWealth(); }
     else if (k === "open-crypto") { showView("crypto"); window.scrollTo(0, 0); }
     else if (k === "setup") { showView("impostazioni"); var el = $("wSettings"); if (el) el.scrollIntoView({ block: "start" }); }
+    else if (k === "setup-fiat") { showView("impostazioni"); var f = $("wFiatHead"); if (f) f.scrollIntoView({ block: "start" }); }
   });
   $("wBody").addEventListener("change", function (e) {
     var t = e.target, w = wSet();
@@ -1128,6 +1166,12 @@
       else if (id === "wGiroDay") { g.day = Math.max(1, Math.min(31, Math.round(+this.value) || 15)); this.value = g.day; saveWealth({ giro: g }); }
       else if (id === "wFee") saveWealth({ fee: Math.max(0, +this.value || 0) });
     });
+  });
+  $("wFiat").addEventListener("change", function (e) {
+    var k = e.target.dataset && e.target.dataset.bank; if (!k) return;
+    var on = Object.assign({}, wSet().asBank || {});
+    if (e.target.checked) on[k] = true; else delete on[k];
+    saveWealth({ asBank: on }); renderFiatSettings();
   });
   $("wAccounts").addEventListener("change", function (e) {
     var n = e.target.dataset && e.target.dataset.acc; if (!n) return;

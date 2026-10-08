@@ -137,6 +137,45 @@ var PF = (function () {
       coins: list, places: places, noPrice: Object.keys(noPrice).sort(), liveCount: live, snapCount: snap, created: doc.creato };
   }
 
+  /* ---------- Currencies on an exchange counted as a bank account ----------
+     settings.wealth.asBank = {"okx|EUR": true}: that balance leaves the crypto and joins the accounts on the Patrimonio page */
+  function isFiat(doc, sym) { var m = doc && doc.monete && doc.monete[sym]; return !!(m && m.fiat) || sym === "EUR" || sym === "USD"; }
+  function placeNames(doc) { var n = {}; ((doc && doc.posti) || []).forEach(function (p) { n[p.id] = p.nome || p.id; }); return n; }
+  /* Every currency (not stablecoin) held somewhere, one row per place and currency */
+  function fiatSpots(doc) {
+    var out = {}, names = placeNames(doc);
+    ((doc && doc.saldi) || []).forEach(function (s) {
+      var sym = String(s.simbolo || ""), q = +s.quantita;
+      if (!isFiat(doc, sym) || !isFinite(q)) return;
+      var k = s.posto + "|" + sym, x = out[k] || (out[k] = { key: k, place: s.posto, placeName: names[s.posto] || s.posto, sym: sym, qty: 0, accounts: [] });
+      x.qty += q; if (x.accounts.indexOf(s.conto) < 0) x.accounts.push(s.conto);
+    });
+    return Object.keys(out).map(function (k) { return out[k]; }).sort(function (a, b) { return a.placeName.localeCompare(b.placeName) || a.sym.localeCompare(b.sym); });
+  }
+  /* The file without the balances counted as a bank account, and those balances apart */
+  function splitBank(doc, asBank) {
+    var on = asBank || {};
+    if (!doc || !Object.keys(on).some(function (k) { return on[k]; })) return { doc: doc, bank: [] };
+    var bank = {}, rest = [], names = placeNames(doc), posti = {};
+    doc.posti.forEach(function (p) { posti[p.id] = p; });
+    doc.saldi.forEach(function (s) {
+      var sym = String(s.simbolo || ""), k = s.posto + "|" + sym;
+      if (!on[k] || !isFiat(doc, sym)) { rest.push(s); return; }
+      var b = bank[k] || (bank[k] = { key: k, place: s.posto, placeName: names[s.posto] || s.posto, sym: sym, qty: 0, accounts: [] });
+      var q = +s.quantita; if (isFinite(q)) b.qty += q;
+      var c = ((posti[s.posto] || {}).conti || []).filter(function (x) { return x.nome === s.conto; })[0] || {};
+      b.accounts.push({ name: s.conto, qty: isFinite(q) ? q : 0, status: c.stato || "ok", when: c.aggiornato || null });
+    });
+    var d = {}; Object.keys(doc).forEach(function (k) { d[k] = doc[k]; }); d.saldi = rest;
+    return { doc: d, bank: Object.keys(bank).map(function (k) { return bank[k]; }) };
+  }
+  /* A currency amount in euros: euros as they are, the others with their dollar price and the euro rate */
+  function fiatEur(doc, prices, sym, q, eurUsd) {
+    if (sym === "EUR") return q;
+    var p = priceOf(doc, prices, sym);
+    return p && eurUsd ? q * p.usd / eurUsd : null;
+  }
+
   /* ---------- Bank accounts and ETFs for the Patrimonio page ---------- */
   var BANKS = ["poste", "fineco"];
   function cleanText(x) { var t = String(x || ""); return (t.replace(/^[^\p{L}\p{N}]+/u, "").trim() || t.trim()); }
@@ -211,5 +250,6 @@ var PF = (function () {
   }
 
   return { valid: valid, parse: parse, cached: cached, cache: cache, cachedPrices: cachedPrices, fetchPrices: fetchPrices, compute: compute, ids: ids,
-    withManual: withManual, cleanSym: cleanSym, KNOWN: KNOWN, banks: banks, etfs: etfs, accountSource: accountSource };
+    withManual: withManual, cleanSym: cleanSym, KNOWN: KNOWN, banks: banks, etfs: etfs, accountSource: accountSource,
+    fiatSpots: fiatSpots, splitBank: splitBank, fiatEur: fiatEur };
 })();

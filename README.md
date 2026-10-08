@@ -97,6 +97,7 @@ La scheda **Patrimonio** somma conti, ETF e crypto, in euro o in dollari.
 
 - Un grafico a torta mostra come è diviso il totale tra Conti, ETF e Crypto. Toccando una fetta si apre la torta di quella parte: i conti per banca, gli ETF per fondo, le crypto per moneta.
 - **Conti**: in *Impostazioni → Patrimonio* si scrivono una volta i saldi di Poste e Fineco di una sera. Da lì il sito aggiunge gli stipendi, toglie le spese dei conti di Money Manager che escono da quella banca, sposta il giroconto mensile da Poste a Fineco, toglie da Fineco gli acquisti di ETF e da Poste le ricariche di ether.fi con la loro commissione. Per ogni conto di Money Manager si sceglie da dove escono i soldi; le spese con la carta ether.fi non si tolgono, perché sono già nel suo saldo. Toccando un conto si vede il calcolo. I contanti non si contano.
+- **Valute sugli exchange**: in *Impostazioni → Patrimonio* si può spuntare una valuta ferma su un exchange (per esempio gli euro su OKX) per contarla come conto in banca: esce dal totale della scheda Crypto ed entra tra i conti. Si toglie la spunta quando quei soldi tornano a servire per le crypto.
 - **Ricariche di ether.fi**: le trova il programma sul PC tra i versamenti in arrivo sul conto ether.fi. Se una non viene da Poste si toglie la spunta.
 - **ETF**: gli ISIN stanno nel programma sul PC, che scrive il prezzo; le quote si scrivono nella scheda e si aggiornano ogni mese.
 

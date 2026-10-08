@@ -1,5 +1,5 @@
 /* Offline support: the site's own files are cached; Google sign-in, Drive and price calls always go to the network. */
-var VERSION = "spese-v4";
+var VERSION = "spese-v5";
 var FILES = [
   "./", "index.html", "privacy.html", "config.js", "manifest.webmanifest",
   "js/core.js", "js/drive.js", "js/charts.js", "js/patrimonio.js", "js/app.js",

@@ -438,6 +438,8 @@ button.w-leg { cursor: pointer; }
 .w-acc { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 180px); gap: 4px 12px; align-items: center; font-size: 14.5px; }
 .w-acc small { grid-column: 1 / -1; font-size: 12.5px; color: var(--muted); margin-top: -2px; }
 .w-acc select { min-height: 40px; }
+.w-fiat span { display: flex; flex-direction: column; gap: 2px; min-width: 0; font-weight: 600; }
+.w-fiat small { font-size: 12.5px; font-weight: 400; color: var(--muted); overflow-wrap: anywhere; }
 .linkbtn { display: inline; padding: 0; border: 0; background: none; color: var(--ink); font: inherit; font-weight: 650; text-decoration: underline; cursor: pointer; }
 
 /* ---------- Impostazioni ---------- */
@@ -715,6 +717,9 @@ button.w-leg { cursor: pointer; }
       <h3 class="h" style="margin-top:6px">Conti di Money Manager</h3>
       <p class="lead">Da dove escono i soldi delle spese registrate su ogni conto. Le spese con la carta ether.fi sono già nel suo saldo: registrale su un conto a parte e scegli "Carta ether.fi".</p>
       <div class="card group" id="wAccounts"></div>
+      <h3 class="h" style="margin-top:6px" id="wFiatHead">Valute sugli exchange</h3>
+      <p class="lead">Euro e dollari fermi su un exchange che non usi per le crypto. Spunta per contarli come conto in banca: escono dal totale crypto ed entrano nei conti. Togli la spunta quando li usi per comprare crypto.</p>
+      <div class="card group" id="wFiat"></div>
     </div>
     <p class="small" style="text-align:center;margin-top:8px"><a href="privacy.html">Privacy</a></p>
   </section>
