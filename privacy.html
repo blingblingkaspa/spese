@@ -19,7 +19,7 @@
 <body>
 <main>
   <h1>Informativa sulla privacy</h1>
-  <p>Spese MoneyManager · ultimo aggiornamento: 4 ottobre 2026</p>
+  <p>Spese MoneyManager · ultimo aggiornamento: 7 ottobre 2026</p>
 
   <h2>Che cos'è</h2>
   <p>Spese MoneyManager è un sito personale, senza server, che mostra le spese registrate con l'app Money Manager leggendone i backup dal Google Drive di chi lo usa. Non è un servizio offerto al pubblico.</p>
@@ -27,16 +27,17 @@
   <h2>Quali dati usa</h2>
   <ul>
     <li><strong>Backup di Money Manager</strong> (file <code>.mmbak</code>) nella cartella scelta del tuo Google Drive: vengono letti e analizzati nel browser.</li>
-    <li><strong>Impostazioni del sito</strong> (divisione dello stipendio, obiettivi): sono salvate in un file nella cartella dati dell'app del tuo Google Drive, invisibile alle altre app.</li>
-    <li><strong>Copia locale</strong>: l'ultimo backup letto e il permesso di accesso a Google restano nella memoria del browser del tuo dispositivo.</li>
+    <li><strong>Impostazioni del sito</strong> (divisione dello stipendio, obiettivi, saldi di partenza dei conti, quote degli ETF, quantità inserite a mano): sono salvate in un file nella cartella dati dell'app del tuo Google Drive, invisibile alle altre app.</li>
+    <li><strong>Patrimonio</strong> (file <code>patrimonio.json</code> nel tuo Google Drive, scritto da un programma che gira sul tuo computer): le quantità di crypto per exchange e wallet, i prezzi degli ETF e le ricariche del conto ether.fi vengono letti e sommati nel browser. Anche i saldi dei conti sono calcolati nel browser.</li>
+    <li><strong>Copia locale</strong>: l'ultimo backup letto, l'ultimo <code>patrimonio.json</code>, gli ultimi prezzi e il permesso di accesso a Google restano nella memoria del browser del tuo dispositivo.</li>
   </ul>
 
   <h2>Dove vanno i dati</h2>
-  <p>Da nessuna parte. Il sito comunica solo con Google (accesso e Google Drive). Non ci sono server, analisi statistiche, pubblicità né terze parti. I dati non vengono venduti, condivisi o trasferiti.</p>
+  <p>Da nessuna parte. Il sito comunica con Google (accesso e Google Drive) e, nelle schede Patrimonio e Crypto, con <a href="https://www.coingecko.com">CoinGecko</a> per i prezzi: a CoinGecko arriva solo l'elenco delle monete di cui chiedere il prezzo, mai le quantità, i saldi o i dati di Google. Non ci sono server, analisi statistiche né pubblicità. I dati non vengono venduti, condivisi o trasferiti.</p>
 
   <h2>Permessi Google</h2>
   <ul>
-    <li><code>drive.readonly</code>: per leggere i backup. Il sito non può modificare né cancellare i tuoi file.</li>
+    <li><code>drive.readonly</code>: per leggere i backup e <code>patrimonio.json</code>. Il sito non può modificare né cancellare i tuoi file.</li>
     <li><code>drive.appdata</code>: per salvare le impostazioni nella cartella dati dell'app.</li>
   </ul>
   <p>L'uso dei dati ricevuti dalle API di Google rispetta le <a href="https://developers.google.com/terms/api-services-user-data-policy">norme sui dati utente dei servizi API di Google</a>, compresi i requisiti di uso limitato.</p>

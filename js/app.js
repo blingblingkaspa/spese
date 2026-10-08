@@ -13,6 +13,24 @@
   function n0(x) { return minus(n0F.format(zero(x))); }
   function signed(x) { x = zero(x); return (x > 0 ? "+" : "") + eur0.format(x); }
   var pct = function (x) { return (x * 100).toLocaleString("it-IT", { maximumFractionDigits: 0 }) + "%"; };
+  /* Patrimonio: dollars, coin quantities and prices */
+  var usdF0 = new Intl.NumberFormat("it-IT", { style: "currency", currency: "USD", currencyDisplay: "narrowSymbol", maximumFractionDigits: 0, useGrouping: "always" });
+  var usdF2 = new Intl.NumberFormat("it-IT", { style: "currency", currency: "USD", currencyDisplay: "narrowSymbol", minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: "always" });
+  var qtyF = [2, 4, 8].map(function (d) { return new Intl.NumberFormat("it-IT", { maximumFractionDigits: d, useGrouping: "always" }); });
+  var prF = new Intl.NumberFormat("it-IT", { maximumSignificantDigits: 4 });
+  function usd0(x) { return minus(usdF0.format(zero(x))); }
+  function qty(x) { var a = Math.abs(x); return minus(qtyF[a >= 1000 ? 0 : a >= 1 ? 1 : 2].format(x)); }
+  function share(x) { return x > 0 && x < 0.005 ? "<1%" : (x * 100).toLocaleString("it-IT", { maximumFractionDigits: x < 0.1 ? 1 : 0 }) + "%"; }
+  function when(iso) {
+    if (!iso) return "";
+    var d = new Date(iso); if (isNaN(d)) return "";
+    var t = d.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" }), now = new Date();
+    var day = function (x) { return x.getFullYear() + "-" + x.getMonth() + "-" + x.getDate(); };
+    var y = new Date(now); y.setDate(now.getDate() - 1);
+    if (day(d) === day(now)) return "oggi alle " + t;
+    if (day(d) === day(y)) return "ieri alle " + t;
+    return d.toLocaleDateString("it-IT", { day: "numeric", month: "short" }) + " alle " + t;
+  }
   var fmtDate = function (d) { var p = d.split("-"); return p[2] + "/" + p[1] + "/" + p[0].slice(2); };
   var esc = function (s) { return String(s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); };
   function cap(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
@@ -25,7 +43,8 @@
   function subName(s) { return s.sub === "Generico" && !s.container ? s.macro : s.sub; }
   var ICON_INFO = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.5M12 7.6v.1"/></svg>';
 
-  var state = { data: null, src: null, SQL: null, view: "mese", month: null, movFilter: "all", sheet: null, editPlan: false };
+  var state = { data: null, src: null, SQL: null, view: "mese", month: null, movFilter: "all", sheet: null, editPlan: false,
+    pf: { doc: null, file: null, prices: null, err: null, loading: false, priceErr: null, priceLoading: false, checkedAt: 0 } };
 
   /* ---------- Settings: this device first, then the file in the user's Drive ---------- */
   var settings = clone(MM.DEFAULT_SETTINGS);
@@ -85,6 +104,7 @@
   function ingest(bytes, src) {
     return sqlReady().then(function (SQL) {
       var raw = MM.readDb(SQL, bytes);
+      state.rows = raw.rows;
       state.full = MM.normalise(raw.rows, today());
       rescope();
       state.src = src;
@@ -140,6 +160,7 @@
       return;
     }
     hideSignIn();
+    syncPortfolio();
     syncing = true; $("reloadBtn").disabled = true; $("refresh").disabled = true;
     setStatus("loading", "Cerco l'ultimo backup su Drive…");
     syncSettings().catch(function (e) { if (e && e.code === "auth") throw e; syncMsg("Non riesco a leggere le impostazioni dal Drive: uso quelle di questo dispositivo."); })
@@ -184,13 +205,13 @@
   }
 
   /* ---------- Views ---------- */
-  var TITLES = { mese: "Mese", grafici: "Andamento", analisi: "Medie", movimenti: "Movimenti", impostazioni: "Impostazioni" };
+  var TITLES = { mese: "Mese", grafici: "Andamento", analisi: "Medie", movimenti: "Movimenti", patrimonio: "Patrimonio", crypto: "Crypto", impostazioni: "Impostazioni" };
   function showView(v) {
     state.view = v; store(VIEW_KEY, v);
     Charts.hideTip();
     document.querySelectorAll(".view").forEach(function (el) { el.hidden = !state.data || el.id !== "v-" + v; });
     if (v === "impostazioni") $("v-impostazioni").hidden = false;
-    document.querySelectorAll("nav.tabs button").forEach(function (b) { if (b.dataset.view === v) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current"); });
+    document.querySelectorAll("#drawer button[data-view]").forEach(function (b) { if (b.dataset.view === v) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current"); });
     document.title = TITLES[v] + " · Spese";
     if (state.data) renderView(v);
     else if (v === "impostazioni") renderSettings();
@@ -239,6 +260,8 @@
     else if (v === "grafici") renderTrends();
     else if (v === "analisi") renderAnalysis();
     else if (v === "movimenti") renderMoves();
+    else if (v === "crypto") { renderCrypto(); refreshPrices(false); }
+    else if (v === "patrimonio") { renderWealth(); refreshPrices(false); }
     else if (v === "impostazioni") renderSettings();
   }
 
@@ -431,7 +454,8 @@
     var s = state.sheet; state.sheet = null; $("scrim").hidden = true; $("sheet").hidden = true;
     Charts.hideTip();
     document.body.classList.remove("locked");
-    var el = s && (s.key ? document.querySelector('[data-key="' + (window.CSS && CSS.escape ? CSS.escape(s.key) : s.key) + '"]') : document.querySelector('.env[data-c="' + s.c + '"]'));
+    var cssq = function (v) { return window.CSS && CSS.escape ? CSS.escape(v) : v; };
+    var el = s && (s.key ? document.querySelector('[data-key="' + cssq(s.key) + '"]') : document.querySelector('.env[data-c="' + s.c + '"]'));
     if (el && el.focus) el.focus({ preventScroll: true });
   }
 
@@ -603,11 +627,401 @@
     s.selectedIndex = i; state.movUserSet = true; renderMoves();
   }
 
+  /* ---------- Patrimonio: quantities from patrimonio.json (the program on the PC), prices live from CoinGecko ---------- */
+  var PF_FILE = "patrimonio.json", SMALL_KEY = "mm-pf-small", STALE_H = 2.5;
+  var ICON_WARN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5 2.8 19.5h18.4z"/><path d="M12 10v4.2M12 16.9v.1"/></svg>';
+  var PLACE_TYPE = { exchange: "Exchange", wallet: "Hardware wallet", app: "App di pagamento", manuale: "Inserito a mano" };
+  /* The PC file plus what is typed on this site (for apps that cannot be read, like Kast) */
+  function pfDoc() { return PF.withManual(state.pf.doc, settings.pfManual); }
+  function parseQty(v) {
+    var t = String(v || "").replace(/\s|'/g, "");
+    if (t.indexOf(",") >= 0) t = t.replace(/\./g, "").replace(",", ".");
+    var n = parseFloat(t);
+    return isFinite(n) ? n : null;
+  }
+  function pfRender() { if (!state.data) return; if (state.view === "crypto") renderCrypto(); else if (state.view === "patrimonio") renderWealth(); }
+  function hideSmall() { return load(SMALL_KEY) !== "0"; }
+  function setPortfolio(doc, file) { state.pf.doc = doc; state.pf.file = file; state.pf.err = null; PF.cache(doc, file); }
+
+  /* The newest patrimonio.json in Drive; downloaded only when it changed */
+  function syncPortfolio() {
+    if (!Drive.token() || state.pf.loading) return;
+    state.pf.loading = true; state.pf.checkedAt = Date.now();
+    Drive.latestNamed(PF_FILE).then(function (f) {
+      if (!f) { if (!state.pf.doc || (state.pf.file && state.pf.file.via === "drive")) { state.pf.err = "Non trovo " + PF_FILE + " nel tuo Drive."; } return; }
+      var cur = state.pf.file;
+      if (cur && cur.id === f.id && String(cur.when || "") >= String(f.modifiedTime || "")) { state.pf.err = null; return; }
+      return Drive.download(f.id).then(function (buf) {
+        var doc = PF.parse(new TextDecoder("utf-8").decode(buf));
+        setPortfolio(doc, { id: f.id, when: f.modifiedTime, via: "drive" });
+        refreshPrices(true);
+      });
+    }).catch(function (e) {
+      if (e && e.code === "offline") return;
+      if (e && e.code === "auth") return; // the main sync shows the sign-in
+      state.pf.err = e && e.code === "limit" ? "Google ha rifiutato la richiesta per troppi accessi: riprovo al prossimo aggiornamento." :
+        e instanceof Error ? e.message : "Non riesco a leggere " + PF_FILE + " dal Drive.";
+    }).then(function () { state.pf.loading = false; pfRender(); });
+  }
+  function refreshPrices(force) {
+    var pf = state.pf;
+    var doc = pfDoc();
+    if (!doc || pf.priceLoading) return;
+    if (!force && pf.prices && Date.now() - pf.prices.at < 60000 && !pf.priceErr && PF.ids(doc).every(function (id) { return id === "tether" || id in pf.prices.usd; })) return;
+    pf.priceLoading = true;
+    PF.fetchPrices(doc).then(function (p) { pf.prices = p; pf.priceErr = null; })
+      .catch(function (e) { pf.priceErr = (e && e.code) || "http"; })
+      .then(function () { pf.priceLoading = false; pfRender(); });
+  }
+  function openPfFile(file) {
+    if (!file) return;
+    file.text().then(function (t) {
+      setPortfolio(PF.parse(t), { name: file.name, when: file.lastModified ? new Date(file.lastModified).toISOString() : null, via: "file" });
+      refreshPrices(true); pfRender();
+    }).catch(function (e) { state.pf.err = "Il file scelto non va bene: " + ((e && e.message) || "non è un JSON") + "."; pfRender(); });
+  }
+
+  function pfFlag(text, old) { return '<span class="pf-flag' + (old ? " old" : "") + '"><i aria-hidden="true"></i>' + text + "</span>"; }
+  function accountLine(a, type) {
+    if (a.status === "ok") return (type === "manuale" ? "inserito " : "letto ") + when(a.when) + (a.warn ? " · " + pfFlag(esc(a.warn), true) : "");
+    return pfFlag(a.when ? "non letto: valori di " + when(a.when) : "non letto");
+  }
+  function placeSub(p) {
+    var bad = p.accounts.filter(function (a) { return a.status !== "ok"; });
+    if (bad.length) return pfFlag(bad.length === p.accounts.length ? "non letto" : (bad.length === 1 ? "1 conto non letto" : bad.length + " conti non letti"), bad.every(function (a) { return a.when; }));
+    var n = p.accounts.length;
+    if (p.type === "manuale") return "Inserito a mano" + (p.accounts[0] && p.accounts[0].when ? " · " + esc(when(p.accounts[0].when)) : "");
+    if (p.accounts.some(function (a) { return a.warn; })) return pfFlag("da controllare", true);
+    return esc(PLACE_TYPE[p.type] || "Altro") + (n > 1 ? " · " + n + " conti" : "");
+  }
+
+  /* Money in the chosen currency: the file and the prices are in dollars, euros use the USDT rate */
+  var CUR_KEY = "mm-pf-cur", OPEN = {};
+  var eur2F = new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR", minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: "always" });
+  var K = { cur: "usd", rate: null };
+  function pfCur() { return load(CUR_KEY) === "eur" ? "eur" : "usd"; }
+  function inCur(x) { return K.cur === "eur" ? x / K.rate : x; }
+  function money(x) { x = inCur(x); if (Math.abs(x) < 0.005) x = 0; return minus((K.cur === "eur" ? (Math.abs(x) >= 1000 ? eur0F : eur2F) : (Math.abs(x) >= 1000 ? usdF0 : usdF2)).format(x)); }
+  function money0(x) { x = zero(inCur(x)); return minus((K.cur === "eur" ? eur0F : usdF0).format(x)); }
+  function mprice(x) {
+    x = inCur(x); var a = Math.abs(x), F = K.cur === "eur" ? [eur0F, eur2F, " €"] : [usdF0, usdF2, " $"];
+    return minus(a >= 1000 ? F[0].format(x) : a >= 1 ? F[1].format(x) : prF.format(x) + F[2]);
+  }
+  function sym1() { return K.cur === "eur" ? "€" : "$"; }
+  function pctTxt(x) { return (x >= 0 ? "+" : "") + minus(x.toLocaleString("it-IT", { minimumFractionDigits: 1, maximumFractionDigits: 1 })) + "%"; }
+  var CHEV = '<svg class="pf-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>';
+  function syncCurButtons() {
+    document.querySelectorAll("#pfCur button").forEach(function (b) { b.setAttribute("aria-pressed", String(b.dataset.cur === K.cur)); });
+  }
+
+  /* One expandable row: the summary on the button, the details right under it */
+  function pfItem(key, rowInner, details) {
+    var open = !!OPEN[key], id = "pfd-" + key.replace(/[^A-Za-z0-9_-]/g, "_");
+    return '<div class="pf-item"><button type="button" class="pf-row" data-open="' + esc(key) + '" aria-expanded="' + open + '" aria-controls="' + id + '">' + rowInner + "</button>" +
+      '<div class="pf-det" id="' + id + '"' + (open ? "" : " hidden") + ">" + details + "</div></div>";
+  }
+  function coinDetails(c) {
+    var p = c.price, ch = p && p.ch !== null && p.ch !== undefined ? p.ch : null;
+    var h = '<div class="pf-det-h"><span>In tutto <b>' + qty(c.qty) + " " + esc(c.sym) + "</b></span>" +
+      (p ? "<span>Prezzo <b>" + mprice(p.usd) + "</b>" + (ch !== null ? ' <span class="' + (ch >= 0 ? "pos" : "neg") + '">' + pctTxt(ch) + " in 24 ore</span>" : "") + "</span>" : "") + "</div>";
+    h += c.where.map(function (w) {
+      var part = c.qty ? w.qty / c.qty : 0;
+      return '<div class="pf-w"><span>' + esc(w.placeName) + " <small>" + esc(w.account) + '</small></span><b>' + qty(w.qty) + " " + esc(c.sym) + "</b>" +
+        (part > 0 ? '<span class="bar" aria-hidden="true"><i style="width:' + (Math.min(1, part) * 100).toFixed(1) + '%"></i></span>' : "") +
+        "<small>" + (p ? money(w.value) + " · " : "") + (part > 0 ? share(part) + " della quantità" : "debito") + "</small></div>";
+    }).join("");
+    if (!p) h += '<p class="pf-det-n">Senza prezzo: aggiungi il suo id CoinGecko in config.json sul PC (per esempio "' + esc(c.sym) + '": "id-della-moneta").</p>';
+    if (c.where.some(function (w) { return w.qty < 0; })) h += '<p class="pf-det-n">Le quantità con il meno sono debito della carta: spese fatte a credito da restituire.</p>';
+    return h;
+  }
+  function placeDetails(p) {
+    var h = p.accounts.map(function (a) {
+      return '<div class="pf-w"><span>' + esc(a.name) + "</span><b>" + money(a.value) + "</b>" +
+        "<small>" + accountLine(a, p.type) + (a.error ? " · " + esc(a.error) : "") + "</small></div>";
+    }).join("");
+    h += p.coinList.map(function (c) {
+      return '<div class="pf-w pf-w-c"><span>' + esc(c.sym) + " <small>" + qty(c.qty) + "</small></span><b>" + money(c.value) + "</b></div>";
+    }).join("");
+    if (p.type === "manuale") h += '<p class="pf-det-n">Le hai scritte tu: per cambiarle usa "Inseriti a mano" qui sotto.</p>';
+    return h;
+  }
+
+  /* While a hand-typed row is being edited the list is not redrawn, so the field keeps the focus and what is typed */
+  function pfEditing() { var a = document.activeElement; return !!(a && a.tagName === "INPUT" && a.type === "text" && $("pfBody").contains(a)); }
+  function renderCrypto() {
+    if (pfEditing()) { state.pf.dirty = true; return; }
+    state.pf.dirty = false;
+    var pf = state.pf, box = $("pfBody"), doc = pfDoc();
+    K.cur = pfCur(); syncCurButtons();
+    if (!doc) {
+      $("pfFresh").textContent = "";
+      var why = pf.err || (!Drive.token() ? "Accedi con Google per leggere " + PF_FILE + " dal tuo Drive." : pf.loading ? "Cerco " + PF_FILE + " nel tuo Drive…" : "Non trovo " + PF_FILE + " nel tuo Drive.");
+      box.innerHTML = '<div class="card group pf-empty"><h2>Tutte le crypto in un colpo solo</h2><p>' + esc(why) + "</p>" +
+        "<p>Il file lo scrive il programma che gira sul tuo PC: ogni ora legge le quantità dagli exchange e dall'hardware wallet e le salva nel tuo Drive. Qui i prezzi si aggiornano ogni volta che apri la pagina.</p>" +
+        '<div class="btnrow">' + (Drive.token() ? '<button type="button" class="btn small primary" data-pf="reload">Cerca di nuovo</button>' : "") +
+        '<label class="btn small" for="pfFile">Apri un file</label></div></div>' + manualCard();
+      return;
+    }
+    var R = PF.compute(doc, pf.prices), small = hideSmall();
+    K.rate = R.eurUsd || null;
+    var noRate = K.cur === "eur" && !K.rate;
+    if (noRate) K.cur = "usd";
+    var priceAt = R.liveCount ? (pf.prices && pf.prices.at) : null;
+    $("pfFresh").innerHTML = (pf.doc ? "Quantità di " + esc(when(pf.doc.creato)) : "Solo quantità inserite qui") + " · prezzi " + (priceAt ? (Date.now() - priceAt < 90000 ? "di adesso" : "di " + esc(when(new Date(priceAt).toISOString()))) : pf.priceLoading ? "in arrivo…" : "dell'ultimo aggiornamento del PC");
+
+    // the headline in the chosen currency, the other one under it
+    var other = K.rate ? (K.cur === "eur" ? usd0(R.total) : eur0.format(R.total / K.rate)) : null;
+    var h = '<div class="card pf-hero"><span class="lbl">In tutto</span><b class="big">' + money0(R.total) + "</b>" +
+      '<span class="sub">' + (other ? "<span>circa " + other + "</span>" : "") +
+      (R.change !== null ? '<span class="' + (R.change >= 0 ? "pos" : "neg") + '"><b>' + pctTxt(R.changePct * 100) + "</b> · " + (R.change >= 0 ? "+" : "") + money0(R.change) + " in 24 ore</span>" : "") + "</span>";
+    if (R.total > 0) {
+      var cp = Math.max(0, Math.min(1, R.cash / R.total));
+      h += '<div class="pf-cash"><div class="pf-cash-t"><span>Stablecoin e valute</span><b>' + money0(R.cash) + " · " + share(cp) + '</b></div><span class="pf-meter" aria-hidden="true"><i style="width:' + (cp * 100).toFixed(1) + '%"></i></span></div>';
+    }
+    h += "</div>";
+
+    // coins, largest first; tap to see the quantity and where it is
+    var shown = R.coins.filter(function (c) { return !small || !c.price || Math.abs(inCur(c.value)) >= 1; }), hidden = R.coins.length - shown.length;
+    var hiddenVal = R.coins.filter(function (c) { return shown.indexOf(c) < 0; }).reduce(function (t, c) { return t + c.value; }, 0);
+    h += '<div class="block" style="margin-top:4px"><div class="block-head"><h2 class="h">Monete</h2><span class="small">' + R.coins.length + (R.coins.length === 1 ? " moneta" : " monete") + "</span></div>" +
+      '<p class="lead">Quanto vale ogni moneta e quanto pesa sul totale. Tocca una moneta per vedere quanta ne hai e dove.</p><div class="card pf-list">';
+    h += shown.map(function (c) {
+      var row = '<span class="pf-l"><b>' + esc(c.sym) + "</b><small>" + qty(c.qty) + " " + esc(c.sym) + (c.price ? " · " + mprice(c.price.usd) : "") + "</small></span>" +
+        '<span class="pf-r"><b>' + (c.price ? money(c.value) : "—") + "</b><small>" + (c.price ? share(c.pct) : "senza prezzo") + "</small></span>" + CHEV +
+        '<span class="bar" aria-hidden="true"><i style="width:' + (Math.max(0, c.pct) * 100).toFixed(2) + '%"></i></span>';
+      return pfItem("c:" + c.sym, row, coinDetails(c));
+    }).join("") || '<p class="empty">Nessuna moneta.</p>';
+    if (hidden) h += '<p class="pf-more">' + (hidden === 1 ? "E un'altra moneta sotto 1 " + sym1() + " (" : "E altre " + hidden + " monete sotto 1 " + sym1() + " (") + money(hiddenVal) + (hidden === 1 ? ")." : " in tutto).") + "</p>";
+    h += "</div></div>";
+
+    // places, same behaviour
+    h += '<div class="block"><h2 class="h">Dove sono</h2><div class="card pf-list">' + R.places.map(function (p) {
+      var row = '<span class="pf-l"><b>' + esc(p.name) + "</b><small>" + placeSub(p) + "</small></span>" +
+        '<span class="pf-r"><b>' + money(p.value) + "</b><small>" + share(p.pct) + "</small></span>" + CHEV +
+        '<span class="bar" aria-hidden="true"><i style="width:' + (Math.max(0, p.pct) * 100).toFixed(2) + '%"></i></span>';
+      return pfItem("p:" + p.id, row, placeDetails(p));
+    }).join("") + "</div></div>";
+
+    h += '<label class="switch card" for="pfSmall" style="padding:12px 16px">Nascondi le monete sotto 1 ' + sym1() + '<input type="checkbox" id="pfSmall"' + (small ? " checked" : "") + "></label>";
+    h += manualCard();
+
+    // what to know: old quantities, accounts not read, prices
+    var notes = [], ageH = pf.doc ? (Date.now() - new Date(pf.doc.creato).getTime()) / 3600000 : 0;
+    if (ageH > STALE_H) notes.push([ICON_WARN, "Le quantità sono di " + esc(when(pf.doc.creato)) + ": il programma sul PC non le aggiorna da " + (ageH < 48 ? Math.floor(ageH) + " ore" : Math.floor(ageH / 24) + " giorni") + ". Controlla che il PC sia acceso e guarda patrimonio.log."]);
+    var bad = [];
+    R.places.forEach(function (p) { p.accounts.forEach(function (a) { if (a.status !== "ok") bad.push(esc(p.name) + " › " + esc(a.name) + (a.when ? " (valori di " + esc(when(a.when)) + ")" : " (non incluso)")); }); });
+    if (bad.length) notes.push([ICON_WARN, "Non letti all'ultimo aggiornamento: " + bad.join(", ") + ". Tocca il posto per vedere l'errore."]);
+    if (R.noPrice.length) notes.push([ICON_WARN, "Senza prezzo, quindi fuori dal totale: " + R.noPrice.map(esc).join(", ") + ". Aggiungi il loro id CoinGecko in config.json sul PC."]);
+    var debt = 0; R.places.forEach(function (p) { p.accounts.forEach(function (a) { if (a.value < 0) debt += a.value; }); });
+    if (debt < -0.5) notes.push([ICON_INFO, "Il totale toglie " + money(-debt) + " di debito della carta (spese fatte a credito)."]);
+    if (noRate) notes.push([ICON_INFO, "Il cambio euro/dollaro non è ancora disponibile: mostro i dollari finché non arrivano i prezzi."]);
+    if (pf.priceErr && R.coins.length) notes.push([ICON_INFO, (pf.priceErr === "offline" ? "Sei offline" : pf.priceErr === "limit" ? "CoinGecko ha rifiutato la richiesta per troppi accessi" : "Non riesco a prendere i prezzi da CoinGecko") + ": uso " + (R.liveCount ? "gli ultimi prezzi presi su questo dispositivo" : "quelli dell'ultimo aggiornamento del PC") + "."]);
+    else if (R.snapCount && R.liveCount) notes.push([ICON_INFO, R.snapCount === 1 ? "1 moneta usa il prezzo dell'ultimo aggiornamento del PC." : R.snapCount + " monete usano il prezzo dell'ultimo aggiornamento del PC."]);
+    if (pf.err) notes.push([ICON_INFO, esc(pf.err) + " Mostro l'ultima copia."]);
+    if (pf.file && pf.file.via === "file") notes.push([ICON_INFO, "Stai guardando un file aperto a mano (" + esc(pf.file.name || PF_FILE) + "). Al prossimo aggiornamento da Drive torna quello del PC."]);
+    notes.push([ICON_INFO, "Prezzi da CoinGecko, presi ogni volta che apri questa pagina. Per gli euro uso il cambio di USDT."]);
+    h += '<div class="notes">' + notes.map(function (n) { return '<p class="note-i">' + n[0] + "<span>" + n[1] + "</span></p>"; }).join("") + "</div>";
+    h += '<p class="small" style="text-align:center"><label for="pfFile" style="text-decoration:underline;cursor:pointer">Apri un file ' + PF_FILE + "</label></p>";
+    box.innerHTML = h;
+  }
+
+  /* Quantities typed by hand, saved with the settings in Drive: for apps that cannot be read automatically */
+  function manualCard() {
+    var rows = settings.pfManual || [];
+    var h = '<div class="block"><div class="block-head"><h2 class="h">Inseriti a mano</h2><button type="button" class="btn small" data-pf="add">Aggiungi</button></div>' +
+      '<p class="lead">Per le app che non si possono leggere da sole, come Kast. Scrivi il posto, la moneta (USD, USDC, EURC…) e la quantità: si salva nel tuo Drive.</p>';
+    if (!rows.length) return h + "</div>";
+    h += '<div class="card pf-man"><div class="pf-man-r pf-man-h" aria-hidden="true"><span>Posto</span><span>Moneta</span><span>Quantità</span><span></span></div>';
+    rows.forEach(function (m, i) {
+      h += '<div class="pf-man-r">' +
+        '<input type="text" data-mi="' + i + '" data-mk="posto" value="' + esc(m.posto || "") + '" placeholder="Kast" aria-label="Posto" maxlength="30" autocomplete="off">' +
+        '<input type="text" data-mi="' + i + '" data-mk="simbolo" value="' + esc(m.simbolo || "") + '" placeholder="USD" aria-label="Moneta" maxlength="12" autocomplete="off" autocapitalize="characters">' +
+        '<input type="text" inputmode="decimal" data-mi="' + i + '" data-mk="quantita" value="' + (m.quantita !== undefined && m.quantita !== "" ? esc(String(m.quantita).replace(".", ",")) : "") + '" placeholder="0" aria-label="Quantità" autocomplete="off">' +
+        '<button type="button" class="iconbtn" data-pf="del" data-mi="' + i + '" aria-label="Elimina la riga"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg></button></div>';
+    });
+    return h + "</div></div>";
+  }
+  function editManual(i, key, value) {
+    var rows = settings.pfManual = (settings.pfManual || []).slice(), m = rows[i];
+    if (!m) return;
+    if (key === "quantita") { var n = parseQty(value); m.quantita = n === null ? "" : n; }
+    else if (key === "simbolo") m.simbolo = PF.cleanSym(value);
+    else m.posto = String(value || "").trim().slice(0, 30);
+    m.aggiornato = new Date().toISOString();
+    saveSettings(); refreshPrices(true); renderCrypto();
+  }
+
+  /* ---------- Patrimonio: crypto, ETFs and the bank accounts together ---------- */
+  var W_CUR_KEY = "mm-w-cur", W = { level: null, dirty: false }, WK = { cur: "eur", rate: null };
+  var SRC_LABEL = { poste: "Poste", fineco: "Fineco", etherfi: "Carta ether.fi (già nel saldo)", none: "Non contare" };
+  function wCur() { return load(W_CUR_KEY) === "usd" ? "usd" : "eur"; }
+  function wConv(x) { return WK.cur === "usd" ? x * WK.rate : x; }
+  function wm(x) { var v = wConv(x); if (Math.abs(v) < 0.005) v = 0; return minus((WK.cur === "usd" ? (Math.abs(v) >= 1000 ? usdF0 : usdF2) : (Math.abs(v) >= 1000 ? eur0F : eur2F)).format(v)); }
+  function wm0(x) { return minus((WK.cur === "usd" ? usdF0 : eur0F).format(zero(wConv(x)))); }
+  function wm2(x) { var v = wConv(x); if (Math.abs(v) < 0.005) v = 0; return minus((WK.cur === "usd" ? usdF2 : eur2F).format(v)); }
+  function wSet() { return settings.wealth || {}; }
+  function saveWealth(patch) { settings.wealth = Object.assign({}, wSet(), patch); saveSettings(); }
+  function editingIn(box) { var a = document.activeElement; return !!(a && a.tagName === "INPUT" && a.type === "text" && box.contains(a)); }
+  function shortDate(d) { return d ? new Date(d.length > 10 ? d : d + "T12:00:00").toLocaleDateString("it-IT", { day: "numeric", month: "short" }) : ""; }
+
+  function wealthData() {
+    var pf = state.pf, doc = pfDoc(), w = wSet();
+    var R = doc ? PF.compute(doc, pf.prices) : null;
+    var rate = (R && R.eurUsd) || (pf.prices && pf.prices.eurUsd) || (pf.doc && pf.doc.eur_usd) || null;
+    var bk = PF.banks(state.rows, w, (pf.doc && pf.doc.ricariche) || [], today());
+    var et = PF.etfs(pf.doc, w.etf, rate);
+    var crypto = R && rate ? R.total / rate : 0;
+    var etf = et.reduce(function (t, e) { return t + e.value; }, 0);
+    var P = bk.banks.poste, F = bk.banks.fineco;
+    var coins = R && rate ? R.coins.filter(function (c) { return Math.abs(c.value / rate) >= 0.5; }).map(function (c) { return { label: c.sym, value: c.value / rate }; }) : [];
+    return { R: R, rate: rate, bk: bk, et: et, crypto: crypto, etf: etf, coins: coins, total: crypto + etf + (bk.set ? P.value + F.value : 0) };
+  }
+
+  /* A donut: one path per slice, a 2px surface gap between them */
+  function donut(slices, mid, midLabel, pickable) {
+    var tot = slices.reduce(function (t, s) { return t + Math.max(0, s.value); }, 0), a = -Math.PI / 2, R0 = 98, R1 = 62, h = "";
+    function pt(r, ang) { return (100 + r * Math.cos(ang)).toFixed(2) + " " + (100 + r * Math.sin(ang)).toFixed(2); }
+    slices.forEach(function (s, i) {
+      var f = tot > 0 ? s.value / tot : 0; if (f <= 0) return;
+      var b = a + f * 2 * Math.PI, d;
+      // a whole ring: two half circles outside (top to bottom and back), the same inside the other way round
+      if (f > 0.9999) d = "M" + pt(R0, -Math.PI / 2) + "A" + R0 + " " + R0 + " 0 1 1 " + pt(R0, Math.PI / 2) + "A" + R0 + " " + R0 + " 0 1 1 " + pt(R0, -Math.PI / 2) + "Z" +
+        "M" + pt(R1, -Math.PI / 2) + "A" + R1 + " " + R1 + " 0 1 0 " + pt(R1, Math.PI / 2) + "A" + R1 + " " + R1 + " 0 1 0 " + pt(R1, -Math.PI / 2) + "Z";
+      else { var big = f > 0.5 ? 1 : 0; d = "M" + pt(R0, a) + "A" + R0 + " " + R0 + " 0 " + big + " 1 " + pt(R0, b) + "L" + pt(R1, b) + "A" + R1 + " " + R1 + " 0 " + big + " 0 " + pt(R1, a) + "Z"; }
+      h += '<path d="' + d + '" fill="' + s.color + '" fill-rule="evenodd" data-i="' + i + '"' + (pickable && s.key ? ' class="pick" data-w="' + s.key + '"' : "") + "><title>" + esc(s.label) + ": " + wm(s.value) + "</title></path>";
+      a = b;
+    });
+    if (!h) h = '<circle cx="100" cy="100" r="80" fill="none" stroke="var(--sunken)" stroke-width="36"></circle>';
+    return '<div class="donut" id="wDonut"><svg viewBox="0 0 200 200" role="img" aria-label="' + esc(slices.map(function (s) { return s.label + " " + wm(s.value); }).join(", ")) + '">' + h + "</svg>" +
+      '<div class="donut-mid"><b>' + mid + "</b><span>" + esc(midLabel) + "</span></div></div>";
+  }
+  function legend(slices, total, pickable) {
+    return '<div class="w-legend">' + slices.map(function (s, i) {
+      var tag = pickable && s.key ? "button" : "div", pc = total > 0 && s.value > 0 ? s.value / total : 0;
+      return "<" + tag + (tag === "button" ? ' type="button" data-w="' + s.key + '"' : "") + ' class="w-leg" data-i="' + i + '" style="--c:' + s.color + '"><i></i>' +
+        '<span class="nm">' + esc(s.label) + (s.note ? " <small>" + esc(s.note) + "</small>" : "") + "</span><b>" + wm(s.value) + '</b><span class="p">' + (pc > 0 ? share(pc) : "—") + "</span></" + tag + ">";
+    }).join("") + "</div>";
+  }
+  var SLOTS = ["var(--s1)", "var(--s2)", "var(--s3)", "var(--s4)", "var(--s5)", "var(--s6)"];
+  /* At most n slices (the tail folds into "Altre"); amounts below zero (card debt) stay in the legend without a slice */
+  function topN(list, n, otherLabel) {
+    var pos = list.filter(function (x) { return x.value > 0; }).sort(function (a, b) { return b.value - a.value; });
+    var neg = list.filter(function (x) { return x.value < 0; }).map(function (x) { x.note = "debito"; x.color = "var(--axis)"; return x; });
+    if (pos.length > n) { var rest = pos.slice(n - 1); pos = pos.slice(0, n - 1).concat([{ label: "Altre", note: rest.length + " " + otherLabel, value: rest.reduce(function (t, x) { return t + x.value; }, 0) }]); }
+    pos.forEach(function (x, i) { x.color = SLOTS[i % SLOTS.length]; });
+    return pos.concat(neg);
+  }
+
+  function renderWealth() {
+    var box = $("wBody");
+    if (editingIn(box)) { W.dirty = true; return; }
+    W.dirty = false;
+    var D = wealthData(), bk = D.bk, P = bk.banks.poste, F = bk.banks.fineco, w = wSet();
+    WK.cur = wCur(); WK.rate = D.rate;
+    var noRate = WK.cur === "usd" && !WK.rate; if (noRate) WK.cur = "eur";
+    document.querySelectorAll("#wCur button").forEach(function (b) { b.setAttribute("aria-pressed", String(b.dataset.cur === WK.cur)); });
+    $("wFresh").textContent = bk.set ? "Conti calcolati dal " + shortDate(bk.from) + (state.pf.doc ? " · crypto di " + when(state.pf.doc.creato) : "") : "Mancano i saldi di partenza di Poste e Fineco";
+
+    var other = D.rate ? (WK.cur === "eur" ? usd0(D.total * D.rate) : eur0.format(D.total)) : null;
+    var h = '<div class="card pf-hero"><span class="lbl">In tutto</span><b class="big">' + wm0(D.total) + "</b>" +
+      '<span class="sub">' + (other ? "<span>circa " + other + "</span>" : "") + "<span>Conti <b>" + wm0(bk.set ? P.value + F.value : 0) + "</b></span><span>Investito <b>" + wm0(D.crypto + D.etf) + "</b></span></span></div>";
+
+    // the donut: what you have by kind, then inside one kind
+    var top = [{ key: "conti", label: "Conti", value: bk.set ? P.value + F.value : 0, color: "var(--s1)", note: bk.set ? "" : "da scrivere" },
+      { key: "etf", label: "ETF", value: D.etf, color: "var(--s2)" }, { key: "crypto", label: "Crypto", value: D.crypto, color: "var(--s3)" }];
+    var lvl = W.level, slices, title, mid, midLabel;
+    if (lvl === "conti") { slices = [{ label: "Poste", value: P.value, color: SLOTS[0] }, { label: "Fineco", value: F.value, color: SLOTS[1] }]; title = "Conti"; }
+    else if (lvl === "etf") { slices = topN(D.et.map(function (e) { return { label: e.name, value: e.value }; }), 6, "ETF"); title = "ETF"; }
+    else if (lvl === "crypto") { slices = topN(D.coins, 6, "monete"); title = "Crypto"; }
+    else { slices = top; title = "Dove sono"; lvl = null; }
+    var tot = slices.reduce(function (t, s) { return t + Math.max(0, s.value); }, 0);
+    mid = wm0(lvl === "crypto" ? D.crypto : lvl ? slices.reduce(function (t, s) { return t + s.value; }, 0) : D.total); midLabel = lvl ? "in " + title.toLowerCase() : "in tutto";
+    h += '<div class="card w-chart"><div class="w-chart-head">' + (lvl ? '<button type="button" class="w-back" data-w="back"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m15 6-6 6 6 6"/></svg>Tutto</button>' : "") +
+      '<h2 class="h">' + title + "</h2></div>" + donut(slices, mid, midLabel, !lvl) + legend(slices, tot, !lvl) +
+      '<p class="small">' + (lvl ? (lvl === "crypto" ? 'Il dettaglio di ogni moneta è nella scheda <button type="button" class="linkbtn" data-w="open-crypto">Crypto</button>.' : "Tocca \"Tutto\" per tornare indietro.") : "Tocca una fetta per vedere com'è divisa.") + "</p></div>";
+
+    // bank accounts, each with how it was calculated
+    h += '<div class="block"><h2 class="h">Conti</h2>';
+    if (!bk.set) h += '<div class="card group"><p>Scrivi una volta i saldi di Poste e Fineco di una sera: da lì il sito aggiunge gli stipendi, toglie le spese, sposta il giroconto del mese e toglie le ricariche di ether.fi.</p><div class="btnrow"><button type="button" class="btn small primary" data-w="setup">Scrivi i saldi</button></div></div>';
+    else {
+      var since = "dal " + shortDate(bk.from);
+      var pRows = '<div class="w-calc"><div><span>Saldo del ' + shortDate(bk.from) + "</span><b>" + wm2(P.start) + "</b></div>" +
+        (P.income ? "<div><span>Stipendi ed entrate</span><b>+" + wm2(P.income) + "</b></div>" : "") +
+        "<div><span>Spese da Poste</span><b>" + wm2(-P.spent) + "</b></div>" +
+        "<div><span>Giroconti a Fineco (" + P.nGiro + ")</span><b>" + wm2(-P.giroOut) + "</b></div>" +
+        "<div><span>Ricariche ether.fi (" + P.nTopups + ")</span><b>" + wm2(-P.topups) + "</b></div>" +
+        (P.fees ? "<div><span>Commissioni (" + P.nTopups + " × " + wm2(bk.fee) + ")</span><b>" + wm2(-P.fees) + "</b></div>" : "") +
+        '<div class="tot"><span>Saldo di oggi</span><b>' + wm2(P.value) + "</b></div></div>";
+      if (bk.topups.length) {
+        pRows += '<p class="w-sub">Ricariche di ether.fi ' + since + "</p>" + bk.topups.slice(0, 15).map(function (t) {
+          return '<div class="w-top' + (t.used ? "" : " off") + '"><span>' + esc(shortDate(t.when)) + " · " + qty(t.qty) + " " + esc(t.sym || "") + " <small>" + wm2(t.eur) + "</small></span>" +
+            '<label><input type="checkbox" data-topup="' + esc(t.id) + '"' + (t.used ? " checked" : "") + ">da Poste</label></div>";
+        }).join("") + '<p class="pf-det-n">Togli la spunta se una ricarica non viene da Poste (per esempio arriva da un exchange).</p>';
+      } else pRows += '<p class="pf-det-n">' + (state.pf.doc && state.pf.doc.ricariche ? "Nessuna ricarica di ether.fi " + since + "." : "Le ricariche di ether.fi le legge il programma sul PC: appena aggiornato, compaiono qui.") + "</p>";
+      var fRows = '<div class="w-calc"><div><span>Saldo del ' + shortDate(bk.from) + "</span><b>" + wm2(F.start) + "</b></div>" +
+        "<div><span>Giroconti da Poste (" + F.nGiro + ")</span><b>+" + wm2(F.giroIn) + "</b></div>" +
+        "<div><span>Acquisti di ETF</span><b>" + wm2(-F.etf) + "</b></div>" +
+        (F.income ? "<div><span>Entrate</span><b>+" + wm2(F.income) + "</b></div>" : "") + (F.spent ? "<div><span>Spese da Fineco</span><b>" + wm2(-F.spent) + "</b></div>" : "") +
+        '<div class="tot"><span>Saldo di oggi</span><b>' + wm2(F.value) + "</b></div></div>";
+      var accRow = function (name, B) {
+        return '<span class="pf-l"><b>' + name + "</b><small>Calcolato " + since + '</small></span><span class="pf-r"><b class="' + (B.value < 0 ? "neg" : "") + '">' + wm2(B.value) + "</b><small>" +
+          (D.total > 0 ? share(Math.max(0, B.value) / D.total) : "") + "</small></span>" + CHEV;
+      };
+      h += '<div class="card pf-list">' + pfItem("w:poste", accRow("Poste", P), pRows) + pfItem("w:fineco", accRow("Fineco", F), fRows) + "</div>";
+    }
+    h += "</div>";
+
+    // ETFs: shares typed once a month, price from the PC
+    h += '<div class="block"><h2 class="h">ETF</h2>';
+    if (!D.et.length) h += '<div class="card group"><p>Aggiungi gli ISIN dei tuoi ETF nel programma sul PC (config.json, voce "etf"): da lì arriva il prezzo. Le quote poi le scrivi qui.</p></div>';
+    else {
+      h += '<p class="lead">Scrivi quante quote hai: aggiornale una volta al mese. Il prezzo arriva dal programma sul PC.</p><div class="card">' + D.et.map(function (e) {
+        var p = e.price !== null ? (e.cur === "EUR" ? eur2F.format(e.price) : e.price.toLocaleString("it-IT", { maximumFractionDigits: 2 }) + " " + e.cur) : null;
+        return '<div class="w-etf"><span class="nm">' + esc(e.name) + "<small>" + esc(e.isin) + (e.symbol ? " · " + esc(e.symbol) : "") + "</small></span>" +
+          '<label for="etf-' + esc(e.isin) + '">Quote<input type="text" inputmode="decimal" id="etf-' + esc(e.isin) + '" data-etf="' + esc(e.isin) + '" value="' + (e.qty ? esc(String(e.qty).replace(".", ",")) : "") + '" placeholder="0" autocomplete="off"></label>' +
+          '<span class="v"><span>' + (p ? qty(e.qty) + " × " + p + (e.priceAt ? " · " + esc(when(e.priceAt)) : "") : (e.error ? "Prezzo non trovato: " + esc(e.error) : "Prezzo non ancora arrivato")) + "</span><b>" + (e.priceEur !== null ? wm(e.value) : "—") + "</b></span>" +
+          (e.qtyAt ? '<small style="grid-column:1/-1;font-size:12px;color:var(--muted)">Quote aggiornate il ' + esc(shortDate(e.qtyAt)) + "</small>" : "") + "</div>";
+      }).join("") + "</div>";
+    }
+    h += "</div>";
+
+    // what to know
+    var notes = [];
+    if (bk.set && (P.value < 0 || F.value < 0)) notes.push([ICON_WARN, "Un saldo calcolato è sotto zero: probabilmente manca un movimento. Aggiorna i saldi di partenza in Impostazioni."]);
+    if (D.R && !D.rate) notes.push([ICON_WARN, "Il cambio euro/dollaro non è disponibile: le crypto non sono nel totale finché non arrivano i prezzi."]);
+    if (!state.pf.doc) notes.push([ICON_INFO, "Le crypto arrivano dal programma sul PC (patrimonio.json): finché non c'è, conto solo quelle inserite a mano."]);
+    if (D.et.some(function (e) { return e.qty && e.priceEur === null; })) notes.push([ICON_INFO, "Un ETF non ha ancora un prezzo in euro: è fuori dal totale."]);
+    if (noRate) notes.push([ICON_INFO, "Mostro gli euro finché non arriva il cambio con il dollaro."]);
+    notes.push([ICON_INFO, "Conti e ETF sono in euro; le crypto sono convertite con il cambio di USDT. I contanti non sono contati."]);
+    h += '<div class="notes">' + notes.map(function (n) { return '<p class="note-i">' + n[0] + "<span>" + n[1] + "</span></p>"; }).join("") + "</div>";
+    box.innerHTML = h;
+  }
+
+  /* Patrimonio settings, in Impostazioni */
+  function renderWealthSettings() {
+    var w = wSet(), g = w.giro || {};
+    $("wDate").value = w.date || ""; $("wPoste").value = w.date ? (+w.poste || 0) : ""; $("wFineco").value = w.date ? (+w.fineco || 0) : "";
+    $("wGiro").value = g.amount !== undefined ? g.amount : ""; $("wGiroDay").value = g.day || 15; $("wFee").value = w.fee !== undefined ? w.fee : "";
+    var acc = {};
+    (state.rows || []).forEach(function (r) {
+      var n = String(r.asset || "").replace(/^[^\p{L}\p{N}]+/u, "").trim() || "Altro", d = String(r.date || "").slice(0, 10);
+      if (!acc[n]) acc[n] = { n: 0, last: "" }; acc[n].n++; if (d > acc[n].last) acc[n].last = d;
+    });
+    var names = Object.keys(acc).sort(function (a, b) { return acc[b].n - acc[a].n; });
+    $("wAccounts").innerHTML = names.length ? names.map(function (n, i) {
+      var src = PF.accountSource(w.accounts, n);
+      return '<div class="w-acc"><label for="wa' + i + '">' + esc(n) + '</label><select class="field" id="wa' + i + '" data-acc="' + esc(n) + '">' +
+        Object.keys(SRC_LABEL).map(function (k) { return '<option value="' + k + '"' + (k === src ? " selected" : "") + ">" + SRC_LABEL[k] + "</option>"; }).join("") +
+        "</select><small>" + acc[n].n + " movimenti · ultimo il " + fmtDate(acc[n].last) + "</small></div>";
+    }).join("") : '<p class="small">Carica un backup per vedere i conti.</p>';
+  }
+
   /* ---------- Impostazioni ---------- */
   function renderSettings() {
     $("srcInfo").textContent = state.src ? (state.src.name || "") + " · " + srcLine(state.src) : "Nessun backup caricato.";
     renderAccount();
     if (!$("syncInfo").textContent) syncMsg(remoteState === "ok" ? "Impostazioni salvate nel tuo Drive: sono le stesse su ogni dispositivo." : "Impostazioni salvate su questo dispositivo.");
+    renderWealthSettings();
     var rs = MM.sortedRules(settings.rules);
     var dupes = {}; rs.forEach(function (r) { dupes[r.from] = (dupes[r.from] || 0) + 1; });
     $("rules").innerHTML = rs.map(function (r, i) {
@@ -633,8 +1047,106 @@
   }
 
   /* ---------- Events ---------- */
-  document.querySelectorAll("nav.tabs button").forEach(function (b) { b.addEventListener("click", function () { showView(b.dataset.view); window.scrollTo(0, 0); }); });
-  $("refresh").addEventListener("click", function () { syncFromDrive(true); });
+  /* Side menu */
+  function openDrawer() {
+    $("drawer").classList.add("open"); $("drawerScrim").hidden = false; $("menuBtn").setAttribute("aria-expanded", "true");
+    var cur = document.querySelector('#drawer button[aria-current="page"]') || document.querySelector("#drawer button[data-view]");
+    if (cur) setTimeout(function () { cur.focus(); }, 30);
+  }
+  function closeDrawer(back) {
+    if (!$("drawer").classList.contains("open")) return;
+    $("drawer").classList.remove("open"); $("drawerScrim").hidden = true; $("menuBtn").setAttribute("aria-expanded", "false");
+    if (back) $("menuBtn").focus();
+  }
+  $("menuBtn").addEventListener("click", openDrawer);
+  var barLine = false;
+  window.addEventListener("scroll", function () { var on = window.scrollY > 4; if (on !== barLine) { barLine = on; document.querySelector(".appbar").classList.toggle("scrolled", on); } }, { passive: true });
+  $("drawerClose").addEventListener("click", function () { closeDrawer(true); });
+  $("drawerScrim").addEventListener("click", function () { closeDrawer(true); });
+  document.querySelectorAll("#drawer button[data-view]").forEach(function (b) { b.addEventListener("click", function () { closeDrawer(false); showView(b.dataset.view); window.scrollTo(0, 0); }); });
+  $("refresh").addEventListener("click", function () { syncFromDrive(true); if (state.view === "crypto" || state.view === "patrimonio") refreshPrices(true); });
+  $("pfBody").addEventListener("click", function (e) {
+    var b = e.target.closest("[data-open],[data-pf]"); if (!b) return;
+    if (b.dataset.open) {
+      var open = b.getAttribute("aria-expanded") !== "true", det = document.getElementById(b.getAttribute("aria-controls"));
+      b.setAttribute("aria-expanded", String(open)); if (det) det.hidden = !open;
+      if (open) OPEN[b.dataset.open] = true; else delete OPEN[b.dataset.open];
+    } else if (b.dataset.pf === "reload") { state.pf.err = null; syncPortfolio(); pfRender(); }
+    else if (b.dataset.pf === "add") {
+      var last = (settings.pfManual || []).slice(-1)[0];
+      settings.pfManual = (settings.pfManual || []).concat([{ posto: last ? last.posto : "Kast", simbolo: "USD", quantita: "", aggiornato: new Date().toISOString() }]);
+      saveSettings(); renderCrypto();
+      var ins = document.querySelectorAll('#pfBody input[data-mk="quantita"]'); if (ins.length) ins[ins.length - 1].focus();
+    } else if (b.dataset.pf === "del") {
+      settings.pfManual = (settings.pfManual || []).filter(function (x, i) { return i !== +b.dataset.mi; });
+      saveSettings(); renderCrypto();
+    }
+  });
+  $("pfFile").addEventListener("change", function () { openPfFile(this.files[0]); this.value = ""; });
+  $("pfBody").addEventListener("focusout", function () {
+    setTimeout(function () { if (state.pf.dirty && !pfEditing() && state.view === "crypto") renderCrypto(); }, 0);
+  });
+  $("wCur").addEventListener("click", function (e) {
+    var b = e.target.closest("button[data-cur]"); if (!b) return;
+    store(W_CUR_KEY, b.dataset.cur); renderWealth();
+  });
+  $("wBody").addEventListener("click", function (e) {
+    var b = e.target.closest("[data-w],[data-open]"); if (!b) return;
+    if (b.dataset.open) {
+      var open = b.getAttribute("aria-expanded") !== "true", det = document.getElementById(b.getAttribute("aria-controls"));
+      b.setAttribute("aria-expanded", String(open)); if (det) det.hidden = !open;
+      if (open) OPEN[b.dataset.open] = true; else delete OPEN[b.dataset.open];
+      return;
+    }
+    var k = b.dataset.w;
+    if (k === "back") { W.level = null; renderWealth(); }
+    else if (k === "conti" || k === "etf" || k === "crypto") { W.level = k; renderWealth(); }
+    else if (k === "open-crypto") { showView("crypto"); window.scrollTo(0, 0); }
+    else if (k === "setup") { showView("impostazioni"); var el = $("wSettings"); if (el) el.scrollIntoView({ block: "start" }); }
+  });
+  $("wBody").addEventListener("change", function (e) {
+    var t = e.target, w = wSet();
+    if (t.dataset.topup) { var skip = Object.assign({}, w.topupSkip || {}); if (t.checked) delete skip[t.dataset.topup]; else skip[t.dataset.topup] = true; saveWealth({ topupSkip: skip }); renderWealth(); }
+    else if (t.dataset.etf) { var n = parseQty(t.value), etf = Object.assign({}, w.etf || {}); etf[t.dataset.etf] = { qty: n === null ? 0 : n, at: new Date().toISOString() }; saveWealth({ etf: etf }); renderWealth(); }
+  });
+  $("wBody").addEventListener("focusout", function () { setTimeout(function () { if (W.dirty && !editingIn($("wBody")) && state.view === "patrimonio") renderWealth(); }, 0); });
+  /* Highlight a slice from its legend row, and the other way round */
+  ["mouseover", "focusin"].forEach(function (ev) {
+    $("wBody").addEventListener(ev, function (e) {
+      var el = e.target.closest && e.target.closest("[data-i]"), d = $("wDonut"); if (!d) return;
+      d.classList.toggle("focus", !!el);
+      d.querySelectorAll("path").forEach(function (p) { p.classList.toggle("on", !!el && p.dataset.i === el.dataset.i); });
+    });
+  });
+  ["wDate", "wPoste", "wFineco", "wGiro", "wGiroDay", "wFee"].forEach(function (id) {
+    $(id).addEventListener("change", function () {
+      var w = wSet(), g = Object.assign({}, w.giro || {});
+      if (id === "wDate") { if (/^\d{4}-\d{2}-\d{2}$/.test(this.value) || this.value === "") saveWealth({ date: this.value || null }); }
+      else if (id === "wPoste") saveWealth({ poste: +this.value || 0 });
+      else if (id === "wFineco") saveWealth({ fineco: +this.value || 0 });
+      else if (id === "wGiro") { g.amount = Math.max(0, +this.value || 0); saveWealth({ giro: g }); }
+      else if (id === "wGiroDay") { g.day = Math.max(1, Math.min(31, Math.round(+this.value) || 15)); this.value = g.day; saveWealth({ giro: g }); }
+      else if (id === "wFee") saveWealth({ fee: Math.max(0, +this.value || 0) });
+    });
+  });
+  $("wAccounts").addEventListener("change", function (e) {
+    var n = e.target.dataset && e.target.dataset.acc; if (!n) return;
+    var acc = Object.assign({}, wSet().accounts || {}); acc[n] = e.target.value; saveWealth({ accounts: acc });
+  });
+  $("pfCur").addEventListener("click", function (e) {
+    var b = e.target.closest("button[data-cur]"); if (!b) return;
+    store(CUR_KEY, b.dataset.cur); renderCrypto();
+  });
+  $("pfBody").addEventListener("change", function (e) {
+    if (e.target.id === "pfSmall") { store(SMALL_KEY, e.target.checked ? "1" : "0"); renderCrypto(); }
+    else if (e.target.dataset && e.target.dataset.mk) editManual(+e.target.dataset.mi, e.target.dataset.mk, e.target.value);
+  });
+  /* Back to the app (installed apps resume instead of reloading): fresh prices, and the file again if it is old */
+  document.addEventListener("visibilitychange", function () {
+    if (document.visibilityState !== "visible" || (state.view !== "crypto" && state.view !== "patrimonio")) return;
+    if (Date.now() - state.pf.checkedAt > 10 * 60000) syncPortfolio();
+    refreshPrices(false);
+  });
   $("monthSel").addEventListener("change", function () { state.month = this.value; renderMonth(); });
   $("monPrev").addEventListener("click", function () { stepMonth(-1); });
   $("monNext").addEventListener("click", function () { stepMonth(1); });
@@ -643,7 +1155,7 @@
   $("planTable").addEventListener("click", function (e) { var b = e.target.closest("button.cat-row"); if (b) openSheet({ key: b.dataset.key }); });
   $("scrim").addEventListener("click", closeSheet);
   $("sheetClose").addEventListener("click", closeSheet);
-  document.addEventListener("keydown", function (e) { if (e.key === "Escape" && state.sheet) closeSheet(); });
+  document.addEventListener("keydown", function (e) { if (e.key !== "Escape") return; if (state.sheet) closeSheet(); else closeDrawer(true); });
   $("period").addEventListener("change", function () { setPeriod(this.value); renderAnalysis(); });
   $("trendPeriod").addEventListener("change", function () { setPeriod(this.value); renderTrends(); });
   $("inv").addEventListener("change", function () { renderAnalysis(); });
@@ -710,6 +1222,8 @@
 
   /* ---------- Boot: this device's last copy first, then Google ---------- */
   var v0 = load(VIEW_KEY); if (v0 && TITLES[v0] && v0 !== "impostazioni") state.view = v0;
+  var pfc = PF.cached(); if (pfc) { state.pf.doc = pfc.doc; state.pf.file = pfc.file; }
+  state.pf.prices = PF.cachedPrices();
   var redirect = Drive.handleRedirect();
   var cached = null; try { cached = JSON.parse(load(CACHE_KEY) || "null"); } catch (e) {}
   var boot = cached && cached.b64 ? ingest(b64ToBytes(cached.b64), cached.src).then(function () { setStatus("", srcLine(state.src)); }) : Promise.resolve();

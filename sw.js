@@ -1,8 +1,8 @@
-/* Offline support: the site's own files are cached; Google sign-in and Drive calls always go to the network. */
-var VERSION = "spese-v3";
+/* Offline support: the site's own files are cached; Google sign-in, Drive and price calls always go to the network. */
+var VERSION = "spese-v4";
 var FILES = [
   "./", "index.html", "privacy.html", "config.js", "manifest.webmanifest",
-  "js/core.js", "js/drive.js", "js/charts.js", "js/app.js",
+  "js/core.js", "js/drive.js", "js/charts.js", "js/patrimonio.js", "js/app.js",
   "vendor/sql-wasm.js", "vendor/sql-wasm.wasm", "vendor/fonts/mona-sans.woff2",
   "icons/icon-192.png", "icons/icon-512.png", "icons/icon-maskable-512.png"
 ];

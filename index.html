@@ -31,10 +31,10 @@
   --c-ess: #0b6fa8; --c-div: #e8590c; --c-inv: #7048e8;
   --card-ess: #0b6fa8; --card-div: #c9490c; --card-inv: #6542d6;
   --bad: #c42b2b; --bad-soft: #fde9e7; --good: #157a3e;
+  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100; --s5: #e87ba4; --s6: #008300;
   --scrim: rgba(14, 16, 20, 0.42);
   --lift: 0 1px 2px rgba(20, 24, 32, 0.05), 0 10px 28px -14px rgba(20, 24, 32, 0.22);
   --font: "Mona Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  --nav-h: 64px;
   --ease: cubic-bezier(.2, .8, .2, 1);
 }
 @media (prefers-color-scheme: dark) {
@@ -45,6 +45,7 @@
     --c-ess: #15a0ce; --c-div: #ee5e23; --c-inv: #8840c6;
     --card-ess: #0d6a8e; --card-div: #b4460f; --card-inv: #6a38b8;
     --bad: #f07067; --bad-soft: #3a1c1b; --good: #46c27a; --scrim: rgba(0, 0, 0, 0.6);
+    --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s6: #008300;
     --lift: 0 0 0 1px rgba(255, 255, 255, 0.04);
   }
 }
@@ -55,6 +56,7 @@
   --c-ess: #15a0ce; --c-div: #ee5e23; --c-inv: #8840c6;
   --card-ess: #0d6a8e; --card-div: #b4460f; --card-inv: #6a38b8;
   --bad: #f07067; --bad-soft: #3a1c1b; --good: #46c27a; --scrim: rgba(0, 0, 0, 0.6);
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s6: #008300;
   --lift: 0 0 0 1px rgba(255, 255, 255, 0.04);
 }
 
@@ -73,13 +75,18 @@ a { color: inherit; }
 .muted { color: var(--muted); }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
-.app { max-width: 600px; margin: 0 auto; padding: env(safe-area-inset-top, 0px) 16px calc(var(--nav-h) + 32px + env(safe-area-inset-bottom, 0px)); }
+.app { max-width: 600px; margin: 0 auto; padding: 0 16px calc(40px + env(safe-area-inset-bottom, 0px)); }
 .title { font-size: 31px; font-stretch: 118%; font-weight: 720; line-height: 1.05; letter-spacing: -0.015em; }
 .lead { color: var(--ink-2); font-size: 14px; }
 .small { font-size: 13px; color: var(--muted); }
 
 /* App bar: sync state and refresh */
 .appbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 52px; }
+/* The bar stays at the top while scrolling, so the menu is always one tap away */
+.appbar { position: sticky; top: 0; z-index: 20; margin: 0 -16px; padding: env(safe-area-inset-top, 0px) 16px 0; min-height: calc(60px + env(safe-area-inset-top, 0px));
+  background: color-mix(in oklab, var(--page) 88%, transparent); -webkit-backdrop-filter: blur(16px) saturate(1.4); backdrop-filter: blur(16px) saturate(1.4);
+  border-bottom: 1px solid transparent; transition: border-color .2s; }
+.appbar.scrolled { border-bottom-color: var(--line); }
 .sync { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--muted); min-width: 0; }
 .sync span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--good); flex: none; }
@@ -99,7 +106,7 @@ a { color: inherit; }
 .btn.small { min-height: 34px; padding: 0 14px; font-size: 13.5px; }
 .btn:disabled { opacity: .45; cursor: default; }
 .btn svg { width: 18px; height: 18px; }
-input[type=number], input[type=text], input[type=month], select.field { font-size: 16px; min-height: 44px; padding: 0 12px; border-radius: 12px; border: 1px solid transparent; background: var(--sunken); color: var(--ink); width: 100%; }
+input[type=number], input[type=text], input[type=month], input[type=date], select.field { font-size: 16px; min-height: 44px; padding: 0 12px; border-radius: 12px; border: 1px solid transparent; background: var(--sunken); color: var(--ink); width: 100%; }
 input[type=number] { text-align: right; -moz-appearance: textfield; }
 input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 input:focus { outline: none; border-color: var(--ink); }
@@ -333,6 +340,106 @@ body.locked { overflow: hidden; }
 .chip[aria-pressed="true"] { background: var(--ink); color: var(--page); }
 .movsum { font-size: 13px; color: var(--muted); padding: 0 2px; }
 
+/* ---------- Patrimonio ---------- */
+.pf-hero { display: grid; gap: 2px; padding: 18px; }
+.pf-hero .lbl { font-size: 14px; color: var(--ink-2); }
+.pf-hero .big { font-size: 48px; font-stretch: 125%; font-weight: 780; line-height: 1.04; letter-spacing: -0.025em; overflow-wrap: anywhere; }
+.pf-hero .sub { display: flex; flex-wrap: wrap; gap: 2px 14px; font-size: 13.5px; color: var(--ink-2); margin-top: 2px; }
+.pf-hero .sub b { font-weight: 650; }
+.pf-cash { display: grid; gap: 7px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
+.pf-cash-t { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; font-size: 13.5px; color: var(--ink-2); }
+.pf-cash-t b { color: var(--ink); font-weight: 650; white-space: nowrap; }
+.pf-meter { height: 6px; border-radius: 999px; background: var(--sunken); overflow: hidden; }
+.pf-meter i { display: block; height: 100%; border-radius: 999px; background: var(--ink-2); }
+.pf-list { display: grid; padding-block: 6px; }
+.pf-row { display: grid; grid-template-columns: minmax(0, 1fr) auto 16px; gap: 6px 10px; align-items: baseline; width: 100%; padding: 10px 0; border: 0; background: none; text-align: left; cursor: pointer; color: inherit; }
+.pf-item:not(:last-child) { border-bottom: 1px solid var(--line); }
+.pf-chev { width: 16px; height: 16px; color: var(--muted); align-self: center; transition: transform .2s var(--ease); }
+.pf-row[aria-expanded="true"] .pf-chev { transform: rotate(180deg); }
+.pf-det { display: grid; margin: 0 0 12px; padding: 4px 12px; border-radius: 14px; background: var(--page); }
+.pf-det-h { display: flex; flex-wrap: wrap; gap: 2px 14px; padding: 8px 0; font-size: 13px; color: var(--ink-2); border-bottom: 1px solid var(--line); }
+.pf-det-h b { color: var(--ink); font-weight: 650; }
+.pf-w { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; align-items: baseline; padding: 9px 0; font-size: 14px; border-bottom: 1px solid var(--line); }
+.pf-w:last-child { border-bottom: 0; }
+.pf-w b { font-weight: 600; white-space: nowrap; }
+.pf-w span small { color: var(--muted); font-size: 12.5px; }
+.pf-w > small { grid-column: 1 / -1; font-size: 12.5px; color: var(--muted); overflow-wrap: anywhere; }
+.pf-w .bar { grid-column: 1 / -1; height: 4px; border-radius: 999px; background: var(--sunken); overflow: hidden; }
+.pf-w .bar i { display: block; height: 100%; border-radius: 999px; background: var(--ink-2); min-width: 2px; }
+.pf-det-n { font-size: 12.5px; color: var(--muted); padding: 8px 0; }
+.seg { display: inline-flex; flex: none; gap: 2px; padding: 3px; border-radius: 999px; background: var(--surface); box-shadow: var(--lift); }
+.seg button { min-width: 44px; min-height: 36px; padding: 0 12px; border: 0; border-radius: 999px; background: none; color: var(--muted); font-size: 15px; font-weight: 680; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--page); }
+.pf-l, .pf-r { display: grid; min-width: 0; }
+.pf-r { text-align: right; }
+.pf-l b { font-size: 15px; font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pf-r b { font-size: 15px; font-weight: 650; white-space: nowrap; }
+.pf-l small, .pf-r small { font-size: 12.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pf-row .bar { grid-column: 1 / -1; height: 6px; border-radius: 999px; background: var(--sunken); overflow: hidden; }
+.pf-row .bar i { display: block; height: 100%; border-radius: 999px; background: var(--ink-2); min-width: 2px; }
+.pf-more { font-size: 12.5px; color: var(--muted); padding: 10px 0 4px; }
+.pf-flag { display: inline-flex; align-items: center; gap: 5px; color: var(--bad); }
+.pf-flag.old { color: var(--ink-2); }
+.pf-flag i { width: 15px; height: 15px; border-radius: 50%; background: currentColor; display: inline-grid; place-items: center; flex: none; font-style: normal; font-size: 10.5px; font-weight: 800; }
+.pf-flag i::before { content: "!"; color: var(--surface); }
+.pf-empty h2 { font-size: 19px; font-stretch: 112%; font-weight: 680; }
+.pf-man { display: grid; gap: 8px; }
+.pf-man-r { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, .8fr) minmax(0, 1fr) 40px; gap: 6px; align-items: center; }
+.pf-man-h { font-size: 12px; color: var(--muted); padding: 0 2px; }
+.pf-man-r input[type=text] { min-height: 40px; padding: 0 10px; min-width: 0; }
+.pf-man-r input[data-mk="quantita"] { text-align: right; }
+.pf-man-r .iconbtn { width: 40px; height: 40px; box-shadow: none; background: var(--sunken); }
+.pf-man-r .iconbtn svg { width: 16px; height: 16px; }
+
+/* ---------- Patrimonio: donut with drill-down, accounts, ETFs ---------- */
+.w-chart { display: grid; gap: 12px; }
+.w-chart-head { display: flex; align-items: center; gap: 10px; min-height: 36px; }
+.w-chart-head h2 { flex: 1; }
+.w-back { display: inline-flex; align-items: center; gap: 4px; min-height: 36px; padding: 0 12px 0 8px; border: 0; border-radius: 999px; background: var(--sunken); color: var(--ink); font-size: 13.5px; font-weight: 650; cursor: pointer; }
+.w-back svg { width: 16px; height: 16px; }
+.donut { position: relative; width: min(232px, 72vw); aspect-ratio: 1; margin: 2px auto 0; }
+.donut svg { display: block; width: 100%; height: 100%; overflow: visible; }
+.donut path { stroke: var(--surface); stroke-width: 2; transition: opacity .15s; }
+.donut path.pick { cursor: pointer; }
+.donut.focus path:not(.on) { opacity: .35; }
+.donut-mid { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; pointer-events: none; padding: 0 44px; }
+.donut-mid b { font-size: 23px; font-stretch: 116%; font-weight: 740; letter-spacing: -0.015em; }
+.donut-mid span { font-size: 12.5px; color: var(--muted); }
+.w-legend { display: grid; }
+.w-leg { display: grid; grid-template-columns: 12px minmax(0, 1fr) auto 50px; gap: 10px; align-items: center; width: 100%; padding: 10px 2px; border: 0; border-bottom: 1px solid var(--line); background: none; color: inherit; text-align: left; font-size: 14.5px; }
+.w-leg:last-child { border-bottom: 0; }
+button.w-leg { cursor: pointer; }
+.w-leg i { width: 12px; height: 12px; border-radius: 4px; background: var(--c); }
+.w-leg b { font-weight: 650; white-space: nowrap; }
+.w-leg .p { text-align: right; color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+.w-leg .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.w-leg .nm small { color: var(--muted); font-size: 12.5px; font-weight: 450; }
+.w-calc { display: grid; padding: 4px 0; }
+.w-calc > div { display: flex; justify-content: space-between; gap: 12px; padding: 7px 0; border-bottom: 1px solid var(--line); font-size: 13.5px; }
+.w-calc > div:last-child { border-bottom: 0; }
+.w-calc b { font-weight: 600; white-space: nowrap; }
+.w-calc .tot { border-top: 2px solid var(--ink); border-bottom: 0; font-size: 14.5px; }
+.w-calc .tot b { font-weight: 720; }
+.w-sub { font-size: 12.5px; font-weight: 650; color: var(--ink-2); padding: 12px 0 2px; }
+.w-top { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 13.5px; }
+.w-top:last-child { border-bottom: 0; }
+.w-top small { color: var(--muted); font-size: 12px; }
+.w-top label { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--ink-2); cursor: pointer; }
+.w-top input { width: 18px; height: 18px; margin: 0; accent-color: var(--ink); }
+.w-top.off > span:first-child { color: var(--muted); text-decoration: line-through; }
+.w-etf { display: grid; grid-template-columns: minmax(0, 1fr) 100px; gap: 4px 12px; align-items: end; padding: 11px 0; border-bottom: 1px solid var(--line); }
+.w-etf:last-child { border-bottom: 0; }
+.w-etf .nm { font-size: 15px; font-weight: 600; overflow-wrap: anywhere; }
+.w-etf .nm small { display: block; font-size: 12.5px; font-weight: 450; color: var(--muted); }
+.w-etf label { display: grid; gap: 3px; font-size: 11.5px; color: var(--muted); }
+.w-etf input[type=text] { min-height: 38px; text-align: right; padding: 0 10px; }
+.w-etf .v { grid-column: 1 / -1; display: flex; justify-content: space-between; gap: 12px; font-size: 13.5px; color: var(--ink-2); }
+.w-etf .v b { font-weight: 650; color: var(--ink); }
+.w-acc { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 180px); gap: 4px 12px; align-items: center; font-size: 14.5px; }
+.w-acc small { grid-column: 1 / -1; font-size: 12.5px; color: var(--muted); margin-top: -2px; }
+.w-acc select { min-height: 40px; }
+.linkbtn { display: inline; padding: 0; border: 0; background: none; color: var(--ink); font: inherit; font-weight: 650; text-decoration: underline; cursor: pointer; }
+
 /* ---------- Impostazioni ---------- */
 .group { display: grid; gap: 14px; }
 .group > p { font-size: 13.5px; color: var(--ink-2); }
@@ -381,15 +488,30 @@ body.locked { overflow: hidden; }
 .stackart .s2 { top: 26px; background: var(--card-div); transform: rotate(5deg); }
 .stackart .s3 { top: 54px; background: var(--card-ess); }
 
-/* ---------- Bottom bar ---------- */
-nav.tabs { position: fixed; inset: auto 0 0 0; z-index: 20; background: color-mix(in oklab, var(--surface) 86%, transparent); -webkit-backdrop-filter: blur(18px) saturate(1.5); backdrop-filter: blur(18px) saturate(1.5); border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom, 0px); }
-nav.tabs .in { max-width: 600px; margin: 0 auto; display: grid; grid-template-columns: repeat(5, 1fr); height: var(--nav-h); padding: 0 4px; }
-nav.tabs button { display: grid; justify-items: center; align-content: center; gap: 3px; font-size: 11px; font-weight: 600; color: var(--muted); background: none; border: 0; cursor: pointer; padding: 0; min-width: 0; }
-nav.tabs .ic { width: 54px; height: 30px; border-radius: 999px; display: grid; place-items: center; transition: background .2s var(--ease); }
-nav.tabs svg { width: 22px; height: 22px; }
-nav.tabs button[aria-current="page"] { color: var(--ink); }
-nav.tabs button[aria-current="page"] .ic { background: var(--sunken); }
-nav.tabs button[aria-current="page"] svg { stroke-width: 2.2; }
+/* ---------- Side menu: a drawer on phones, always open on wide screens ---------- */
+.appbar .sync { flex: 1; }
+.menu-btn { margin-right: 2px; }
+.drawer { position: fixed; z-index: 40; top: 0; bottom: 0; left: 0; width: min(290px, 84vw); overflow-y: auto; overscroll-behavior: contain;
+  display: flex; flex-direction: column; gap: 2px; padding: calc(10px + env(safe-area-inset-top, 0px)) 12px calc(20px + env(safe-area-inset-bottom, 0px));
+  background: var(--page); box-shadow: 0 0 0 1px var(--line), 18px 0 40px -20px rgba(0, 0, 0, .35);
+  transform: translateX(-104%); visibility: hidden; transition: transform .26s var(--ease), visibility 0s linear .26s; }
+.drawer.open { transform: none; visibility: visible; transition: transform .26s var(--ease); }
+.drawer-scrim { position: fixed; inset: 0; z-index: 39; background: var(--scrim); animation: fade .2s ease both; }
+.drawer-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 52px; padding: 0 2px 0 8px; }
+.drawer-name { font-size: 22px; font-stretch: 118%; font-weight: 740; letter-spacing: -0.015em; }
+.drawer-group { font-size: 12px; font-weight: 650; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); padding: 14px 12px 4px; }
+.drawer-sep { height: 1px; background: var(--line); margin: 12px 8px; }
+.drawer button[data-view] { display: flex; align-items: center; gap: 14px; width: 100%; min-height: 48px; padding: 0 12px; border: 0; border-radius: 14px;
+  background: none; color: var(--ink-2); font-size: 16px; font-weight: 600; text-align: left; cursor: pointer; }
+.drawer button[data-view] svg { width: 22px; height: 22px; flex: none; color: var(--muted); }
+.drawer button[data-view]:hover { background: var(--sunken); }
+.drawer button[aria-current="page"] { background: var(--surface); color: var(--ink); box-shadow: var(--lift); }
+.drawer button[aria-current="page"] svg { color: var(--ink); stroke-width: 2.2; }
+@media (min-width: 1100px) {
+  body { padding-left: 270px; }
+  .drawer { width: 270px; transform: none; visibility: visible; transition: none; box-shadow: none; border-right: 1px solid var(--line); padding-top: 22px; }
+  .drawer-close, .menu-btn, .drawer-scrim { display: none !important; }
+}
 
 @media (min-width: 680px) {
   .app { padding-top: 20px; }
@@ -404,6 +526,9 @@ nav.tabs button[aria-current="page"] svg { stroke-width: 2.2; }
 
 <div class="app">
   <header class="appbar">
+    <button type="button" class="iconbtn menu-btn" id="menuBtn" aria-label="Apri il menu" aria-expanded="false" aria-controls="drawer">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+    </button>
     <div class="sync"><i class="dot loading" id="dot"></i><span id="statusText">Carico i dati…</span></div>
     <button type="button" class="iconbtn" id="refresh" aria-label="Aggiorna da Drive">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.35-5.65"/><path d="M20 4v4.6h-4.6"/></svg>
@@ -510,6 +635,23 @@ nav.tabs button[aria-current="page"] svg { stroke-width: 2.2; }
     <div class="card mvlist" id="movList" style="padding-block:6px"></div>
   </section>
 
+  <!-- PATRIMONIO -->
+  <section id="v-patrimonio" class="view" hidden>
+    <div class="viewhead"><h1 class="title">Patrimonio</h1>
+      <div class="seg" id="wCur" role="group" aria-label="Valuta"><button type="button" data-cur="usd" aria-pressed="false" aria-label="Dollari">$</button><button type="button" data-cur="eur" aria-pressed="true" aria-label="Euro">€</button></div></div>
+    <p class="income" id="wFresh"></p>
+    <div id="wBody" style="display:grid;gap:14px"></div>
+  </section>
+
+  <!-- CRYPTO -->
+  <section id="v-crypto" class="view" hidden>
+    <div class="viewhead"><h1 class="title">Crypto</h1>
+      <div class="seg" id="pfCur" role="group" aria-label="Valuta"><button type="button" data-cur="usd" aria-pressed="true" aria-label="Dollari">$</button><button type="button" data-cur="eur" aria-pressed="false" aria-label="Euro">€</button></div></div>
+    <p class="income" id="pfFresh"></p>
+    <div id="pfBody" style="display:grid;gap:14px"></div>
+    <input type="file" id="pfFile" accept=".json,application/json" hidden>
+  </section>
+
   <!-- IMPOSTAZIONI -->
   <section id="v-impostazioni" class="view" hidden>
     <div class="viewhead"><h1 class="title">Impostazioni</h1></div>
@@ -554,19 +696,44 @@ nav.tabs button[aria-current="page"] svg { stroke-width: 2.2; }
         <div class="rule-grid" style="grid-template-columns:minmax(0,1fr) auto;align-items:end"><input type="month" id="ovrNewMonth" aria-label="Mese da aggiungere"><button type="button" class="btn small" id="ovrAdd" style="min-height:44px">Aggiungi mese</button></div>
       </div>
     </div>
+    <div class="block" id="wSettings">
+      <h2 class="h">Patrimonio</h2>
+      <p class="lead">Da qui il sito calcola quanto hai su Poste e Fineco. Scrivi i saldi di una sera: conto i movimenti dal giorno dopo. Quando controlli i saldi veri, aggiornali qui.</p>
+      <div class="card group">
+        <div class="rule-grid" style="grid-template-columns:repeat(3,minmax(0,1fr))">
+          <label class="field-l" for="wDate">Saldi del<input type="date" id="wDate"></label>
+          <label class="field-l" for="wPoste">Poste, €<input type="number" id="wPoste" step="0.01" inputmode="decimal"></label>
+          <label class="field-l" for="wFineco">Fineco, €<input type="number" id="wFineco" step="0.01" inputmode="decimal"></label>
+        </div>
+        <div class="rule-grid" style="grid-template-columns:repeat(3,minmax(0,1fr))">
+          <label class="field-l" for="wGiro">Giroconto a Fineco, €<input type="number" id="wGiro" min="0" step="1" inputmode="decimal"></label>
+          <label class="field-l" for="wGiroDay">Il giorno<input type="number" id="wGiroDay" min="1" max="31" step="1" inputmode="numeric"></label>
+          <label class="field-l" for="wFee">Commissione ricarica, €<input type="number" id="wFee" min="0" step="0.01" inputmode="decimal"></label>
+        </div>
+        <p>Il giroconto passa ogni mese da Poste a Fineco. Ogni ricarica di ether.fi esce da Poste con la sua commissione. Gli acquisti di ETF escono da Fineco.</p>
+      </div>
+      <h3 class="h" style="margin-top:6px">Conti di Money Manager</h3>
+      <p class="lead">Da dove escono i soldi delle spese registrate su ogni conto. Le spese con la carta ether.fi sono già nel suo saldo: registrale su un conto a parte e scegli "Carta ether.fi".</p>
+      <div class="card group" id="wAccounts"></div>
+    </div>
     <p class="small" style="text-align:center;margin-top:8px"><a href="privacy.html">Privacy</a></p>
   </section>
 </div>
 
-<nav class="tabs" aria-label="Sezioni">
-  <div class="in">
-    <button type="button" data-view="mese" aria-current="page"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5.5" width="18" height="13" rx="3"/><path d="m3.6 7.2 8.4 5.6 8.4-5.6"/></svg></span>Mese</button>
-    <button type="button" data-view="grafici"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 20v-6M10 20V8M15 20v-9M20 20V5"/></svg></span>Andamento</button>
-    <button type="button" data-view="analisi"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 20v-8M10 20V6M15 20v-6M20 20v-10"/><path d="M2.5 11.5h19"/></svg></span>Medie</button>
-    <button type="button" data-view="movimenti"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6.5h11M9 12h11M9 17.5h11"/><circle cx="4.5" cy="6.5" r="1.2"/><circle cx="4.5" cy="12" r="1.2"/><circle cx="4.5" cy="17.5" r="1.2"/></svg></span>Movimenti</button>
-    <button type="button" data-view="impostazioni"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2.2"/><circle cx="9" cy="17" r="2.2"/></svg></span>Impostazioni</button>
-  </div>
+<nav class="drawer" id="drawer" aria-label="Sezioni">
+  <div class="drawer-head"><span class="drawer-name">Spese</span><button type="button" class="iconbtn drawer-close" id="drawerClose" aria-label="Chiudi il menu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg></button></div>
+  <p class="drawer-group">Spese</p>
+    <button type="button" data-view="mese" aria-current="page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5.5" width="18" height="13" rx="3"/><path d="m3.6 7.2 8.4 5.6 8.4-5.6"/></svg>Mese</button>
+    <button type="button" data-view="grafici"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 20v-6M10 20V8M15 20v-9M20 20V5"/></svg>Andamento</button>
+    <button type="button" data-view="analisi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 20v-8M10 20V6M15 20v-6M20 20v-10"/><path d="M2.5 11.5h19"/></svg>Medie</button>
+    <button type="button" data-view="movimenti"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6.5h11M9 12h11M9 17.5h11"/><circle cx="4.5" cy="6.5" r="1.2"/><circle cx="4.5" cy="12" r="1.2"/><circle cx="4.5" cy="17.5" r="1.2"/></svg>Movimenti</button>
+  <p class="drawer-group">Patrimonio</p>
+    <button type="button" data-view="patrimonio"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a9 9 0 1 0 9 9h-9z"/><path d="M15 3.5A9 9 0 0 1 20.5 9H15z"/></svg>Patrimonio</button>
+    <button type="button" data-view="crypto"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="9.5" cy="6.5" rx="6" ry="2.6"/><path d="M3.5 6.5v4.2c0 1.4 2.7 2.6 6 2.6 .9 0 1.8-.1 2.6-.3"/><path d="M3.5 10.7v4.2c0 1.4 2.7 2.6 6 2.6 .6 0 1.2 0 1.7-.1"/><path d="M15.5 6.5v3.2"/><circle cx="16.5" cy="15.5" r="4.5"/></svg>Crypto</button>
+  <div class="drawer-sep"></div>
+    <button type="button" data-view="impostazioni"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2.2"/><circle cx="9" cy="17" r="2.2"/></svg>Impostazioni</button>
 </nav>
+<div class="drawer-scrim" id="drawerScrim" hidden></div>
 
 <div class="scrim" id="scrim" hidden></div>
 <div class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle" hidden>
@@ -583,6 +750,7 @@ nav.tabs button[aria-current="page"] svg { stroke-width: 2.2; }
 <script src="js/core.js"></script>
 <script src="js/drive.js"></script>
 <script src="js/charts.js"></script>
+<script src="js/patrimonio.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

@@ -110,6 +110,12 @@ var Drive = (function () {
     return json(UPLOAD + "/files?uploadType=multipart&fields=id", { method: "POST", headers: { "Content-Type": "multipart/related; boundary=" + b }, body: multipart })
       .then(function (r) { settingsId = r.id; return r; });
   }
+  /* Patrimonio: the newest file with this name anywhere in Drive (patrimonio.json, written by the program on the PC) */
+  function latestNamed(name) {
+    var query = "name = '" + String(name).replace(/'/g, "\\'") + "' and trashed = false";
+    return json(API + "/files?q=" + q(query) + "&orderBy=" + q("modifiedTime desc") + "&pageSize=5&fields=" + q("files(id,name,modifiedTime)") + ALL)
+      .then(function (r) { return (r.files || [])[0] || null; });
+  }
   /* One-time import: a settings file the user keeps anywhere in Drive */
   function findImport() {
     return json(API + "/files?q=" + q("name = '" + IMPORT_NAME + "' and trashed = false") + "&orderBy=" + q("modifiedTime desc") + "&fields=" + q("files(id,name)") + ALL).then(function (r) {
@@ -119,5 +125,6 @@ var Drive = (function () {
   }
 
   return { configured: configured, token: token, wasSignedIn: wasSignedIn, signIn: signIn, signOut: signOut, handleRedirect: handleRedirect, canTrySilent: canTrySilent,
-    findFolders: findFolders, latestBackup: latestBackup, download: download, loadSettings: loadSettings, saveSettings: saveSettings, findImport: findImport };
+    findFolders: findFolders, latestBackup: latestBackup, download: download, loadSettings: loadSettings, saveSettings: saveSettings, findImport: findImport,
+    latestNamed: latestNamed };
 })();
