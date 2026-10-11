@@ -29,6 +29,7 @@
   --line: #e3e6ea;
   --axis: #c6cad1;
   --c-ess: #0b6fa8; --c-div: #e8590c; --c-inv: #7048e8;
+  --trip: color-mix(in oklab, var(--c-div) 58%, var(--surface));
   --card-ess: #0b6fa8; --card-div: #c9490c; --card-inv: #6542d6;
   --bad: #c42b2b; --bad-soft: #fde9e7; --good: #157a3e;
   --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100; --s5: #e87ba4; --s6: #008300;
@@ -161,6 +162,10 @@ h3.h { font-size: 15px; font-weight: 650; }
 @keyframes grow { from { transform: scaleX(0); } }
 .env-foot { display: flex; justify-content: space-between; align-items: baseline; gap: 6px 12px; flex-wrap: wrap; font-size: 13px; margin-top: 9px; color: rgba(255,255,255,.86); }
 .env-foot b { color: #fff; font-weight: 650; }
+.env-circa { font-size: 17px; font-stretch: 110%; font-weight: 650; letter-spacing: 0; margin-right: 8px; opacity: .85; vertical-align: 0.5em; }
+.env-rows { display: grid; gap: 6px; margin-top: 12px; padding-top: 11px; border-top: 1px solid rgba(255,255,255,.22); }
+.env-row { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; font-size: 13.5px; color: rgba(255,255,255,.86); }
+.env-row b { color: #fff; font-weight: 650; white-space: nowrap; }
 .env-liq { display: flex; justify-content: space-between; gap: 10px; margin-top: 12px; padding-top: 11px; border-top: 1px solid rgba(255,255,255,.22); font-size: 13.5px; color: rgba(255,255,255,.86); }
 .env-liq b { color: #fff; font-weight: 650; }
 
@@ -297,6 +302,10 @@ body.locked { overflow: hidden; }
 /* ---------- Medie ---------- */
 .avg-hero { padding: 6px 2px 2px; font-size: 17px; line-height: 1.35; color: var(--ink-2); }
 .avg-hero b { display: block; color: var(--ink); font-size: 46px; font-stretch: 125%; font-weight: 780; letter-spacing: -0.025em; line-height: 1.05; margin: 2px 0; }
+.avg-say { display: block; margin-top: 6px; font-size: 15px; color: var(--ink-2); }
+.avg-say b { display: inline; font-size: inherit; font-stretch: 100%; font-weight: 650; letter-spacing: 0; margin: 0; color: var(--ink); }
+.plan-say { font-size: 14.5px; line-height: 1.5; color: var(--ink-2); padding: 2px 0 12px; border-bottom: 1px solid var(--line); }
+.plan-say b { color: var(--ink); font-weight: 650; }
 .bullets { display: grid; gap: 14px; }
 .bl { display: grid; gap: 6px; }
 .bl-t { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; font-size: 14.5px; }
@@ -391,7 +400,21 @@ body.locked { overflow: hidden; }
 .pf-man-r .iconbtn { width: 40px; height: 40px; box-shadow: none; background: var(--sunken); }
 .pf-man-r .iconbtn svg { width: 16px; height: 16px; }
 
-/* ---------- Patrimonio: donut with drill-down, accounts, ETFs ---------- */
+/* ---------- Patrimonio: the split bar, history, accounts, ETFs ---------- */
+.pf-hero .big .dec { font-size: .52em; font-stretch: 112%; letter-spacing: -0.01em; margin-left: 1px; }
+.w-hist { display: grid; gap: 10px; }
+.w-ro { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; align-items: baseline; padding: 10px 0; font-size: 15px; }
+.w-ro + .w-ro { border-top: 1px solid var(--line); }
+.w-ro > span { font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
+.w-ro small { display: block; font-size: 12.5px; font-weight: 450; color: var(--muted); }
+.w-ro b { font-weight: 650; white-space: nowrap; }
+.w-ro.off > span, .w-ro.off b { color: var(--muted); }
+.block-anchor { scroll-margin-top: calc(70px + env(safe-area-inset-top, 0px)); height: 0; }
+.lead b { color: var(--ink); font-weight: 650; }
+.c-line { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.c-area { fill-opacity: .07; stroke: none; }
+.c-dot { stroke: var(--surface); stroke-width: 2; }
+.c-cross { stroke: var(--ink-2); stroke-width: 1; }
 .w-chart { display: grid; gap: 12px; }
 .w-chart-head { display: flex; align-items: center; gap: 10px; min-height: 36px; }
 .w-chart-head h2 { flex: 1; }
@@ -405,6 +428,7 @@ body.locked { overflow: hidden; }
 .donut-mid { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; pointer-events: none; padding: 0 44px; }
 .donut-mid b { font-size: 23px; font-stretch: 116%; font-weight: 740; letter-spacing: -0.015em; }
 .donut-mid span { font-size: 12.5px; color: var(--muted); }
+.donut-mid b .dec { font-size: .6em; }
 .w-legend { display: grid; }
 .w-leg { display: grid; grid-template-columns: 12px minmax(0, 1fr) auto 50px; gap: 10px; align-items: center; width: 100%; padding: 10px 2px; border: 0; border-bottom: 1px solid var(--line); background: none; color: inherit; text-align: left; font-size: 14.5px; }
 .w-leg:last-child { border-bottom: 0; }
@@ -443,6 +467,24 @@ button.w-leg { cursor: pointer; }
 .linkbtn { display: inline; padding: 0; border: 0; background: none; color: var(--ink); font: inherit; font-weight: 650; text-decoration: underline; cursor: pointer; }
 
 /* ---------- Impostazioni ---------- */
+.set-group { font-size: 12px; font-weight: 650; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); padding: 10px 4px 0; }
+.sect { background: var(--surface); border-radius: 20px; box-shadow: var(--lift); scroll-margin-top: calc(70px + env(safe-area-inset-top, 0px)); }
+.sect > summary { display: flex; align-items: center; gap: 12px; padding: 14px 16px; cursor: pointer; list-style: none; border-radius: 20px; }
+.sect > summary::-webkit-details-marker { display: none; }
+.sect-t { display: grid; gap: 1px; flex: 1; min-width: 0; }
+.sect-t .h { font-size: 16.5px; font-stretch: 108%; font-weight: 680; }
+.sect-hint { font-size: 12.5px; color: var(--muted); }
+.sect-chev { width: 18px; height: 18px; flex: none; color: var(--muted); transition: transform .2s var(--ease); }
+.sect[open] > summary .sect-chev { transform: rotate(180deg); }
+.sect-body { display: grid; gap: 10px; padding: 0 12px 14px; }
+.sect-body > .card { box-shadow: none; background: var(--page); }
+.w-yield-r { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: 6px 10px; align-items: end; }
+.w-yield-r + .w-yield-r { padding-top: 12px; border-top: 1px solid var(--line); }
+.w-yield-r .nm { grid-column: 1 / -1; font-size: 14.5px; font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
+.rule .rule-grid { align-items: end; }
+.w-yield-r .nm small { font-size: 12px; font-weight: 450; color: var(--muted); }
+.w-yield-r label { display: grid; gap: 4px; font-size: 12px; color: var(--ink-2); }
+.w-yield-r input { min-height: 40px; padding: 0 8px; font-size: 15px; }
 .group { display: grid; gap: 14px; }
 .group > p { font-size: 13.5px; color: var(--ink-2); }
 .field-l { display: grid; gap: 6px; font-size: 13px; color: var(--ink-2); }
@@ -573,7 +615,7 @@ button.w-leg { cursor: pointer; }
     </div>
     <p class="income" id="incomeBox"></p>
     <div class="envelopes" id="envelopes"></div>
-    <div class="grand"><span>Disponibile in tutto</span><b class="num" id="totalAvail"></b></div>
+    <div class="grand"><span>Saldo di tutte le buste</span><b class="num" id="totalAvail"></b></div>
     <div class="notes" id="monthNotes" hidden></div>
   </section>
 
@@ -672,55 +714,79 @@ button.w-leg { cursor: pointer; }
       <p class="small" id="syncInfo"></p>
     </div>
 
-    <div class="block">
-      <div class="block-head"><h2 class="h">Divisione dello stipendio</h2><button type="button" class="btn small" id="addRule">Aggiungi</button></div>
-      <p class="lead">Ogni divisione vale dal mese indicato in poi. I mesi passati restano calcolati con quella che valeva allora.</p>
-      <div class="card"><div class="rules" id="rules"></div></div>
-    </div>
-
-    <div class="block">
-      <h2 class="h">Entrate e inizio conteggio</h2>
-      <div class="card group">
-        <div class="rule-grid" style="grid-template-columns:repeat(2,minmax(0,1fr))">
-          <label class="field-l" for="startIn">Uso i dati dal mese<input type="month" id="startIn"></label>
-          <label class="field-l" for="estIn">Stipendio stimato, €<input type="number" id="estIn" min="0" step="1"></label>
-        </div>
-        <label for="prevIn" class="check"><input type="checkbox" id="prevIn"><span>Lo stipendio registrato in un mese vale per il mese precedente (arriva tra il 5 e il 15)</span></label>
-        <p>Spese ed entrate precedenti a questo mese sono ignorate in tutte le sezioni. La stima vale solo per i mesi prima del primo "Stipendio" registrato in Money Manager. Dal primo stipendio registrato in poi uso solo le entrate vere. Le altre entrate (per esempio il casinò) non contano.</p>
+    <p class="set-group">Spese</p>
+    <details class="sect" id="set-rules">
+      <summary><span class="sect-t"><span class="h">Divisione dello stipendio</span><span class="sect-hint">Le percentuali di ogni busta, mese per mese</span></span><svg class="sect-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary>
+      <div class="sect-body">
+        <p class="lead">Ogni divisione vale dal mese indicato in poi. I mesi passati restano calcolati con quella che valeva allora.</p>
+        <div class="card"><div class="rules" id="rules"></div></div>
+        <button type="button" class="btn small" id="addRule" style="justify-self:start">Aggiungi una divisione</button>
       </div>
-    </div>
-
-    <div class="block">
-      <h2 class="h">Investimenti dall'altra app</h2>
-      <div class="card group">
-        <p>Totale investito in ETF e crypto nei mesi in cui non lo registravi in Money Manager. Un mese con un importo usa questo numero al posto di quelli dell'app; un mese vuoto usa Money Manager.</p>
-        <div class="ovr" id="ovr"></div>
-        <div class="rule-grid" style="grid-template-columns:minmax(0,1fr) auto;align-items:end"><input type="month" id="ovrNewMonth" aria-label="Mese da aggiungere"><button type="button" class="btn small" id="ovrAdd" style="min-height:44px">Aggiungi mese</button></div>
-      </div>
-    </div>
-    <div class="block" id="wSettings">
-      <h2 class="h">Patrimonio</h2>
-      <p class="lead">Da qui il sito calcola quanto hai su Poste e Fineco. Scrivi i saldi di una sera: conto i movimenti dal giorno dopo. Quando controlli i saldi veri, aggiornali qui.</p>
-      <div class="card group">
-        <div class="rule-grid" style="grid-template-columns:repeat(3,minmax(0,1fr))">
-          <label class="field-l" for="wDate">Saldi del<input type="date" id="wDate"></label>
-          <label class="field-l" for="wPoste">Poste, €<input type="number" id="wPoste" step="0.01" inputmode="decimal"></label>
-          <label class="field-l" for="wFineco">Fineco, €<input type="number" id="wFineco" step="0.01" inputmode="decimal"></label>
+    </details>
+    <details class="sect" id="set-income">
+      <summary><span class="sect-t"><span class="h">Entrate e inizio conteggio</span><span class="sect-hint">Da quando contare e come leggere lo stipendio</span></span><svg class="sect-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary>
+      <div class="sect-body">
+        <div class="card group">
+          <div class="rule-grid" style="grid-template-columns:repeat(2,minmax(0,1fr))">
+            <label class="field-l" for="startIn">Uso i dati dal mese<input type="month" id="startIn"></label>
+            <label class="field-l" for="estIn">Stipendio stimato, €<input type="number" id="estIn" min="0" step="1"></label>
+          </div>
+          <label for="prevIn" class="check"><input type="checkbox" id="prevIn"><span>Lo stipendio registrato in un mese vale per il mese precedente (arriva tra il 5 e il 15)</span></label>
+          <p>Spese ed entrate precedenti a questo mese sono ignorate in tutte le sezioni. La stima vale solo per i mesi prima del primo "Stipendio" registrato in Money Manager. Dal primo stipendio registrato in poi uso solo le entrate vere. Le altre entrate (per esempio il casinò) non contano.</p>
         </div>
-        <div class="rule-grid" style="grid-template-columns:repeat(3,minmax(0,1fr))">
-          <label class="field-l" for="wGiro">Giroconto a Fineco, €<input type="number" id="wGiro" min="0" step="1" inputmode="decimal"></label>
-          <label class="field-l" for="wGiroDay">Il giorno<input type="number" id="wGiroDay" min="1" max="31" step="1" inputmode="numeric"></label>
-          <label class="field-l" for="wFee">Commissione ricarica, €<input type="number" id="wFee" min="0" step="0.01" inputmode="decimal"></label>
-        </div>
-        <p>Il giroconto passa ogni mese da Poste a Fineco. Ogni ricarica di ether.fi esce da Poste con la sua commissione. Gli acquisti di ETF escono da Fineco.</p>
       </div>
-      <h3 class="h" style="margin-top:6px">Conti di Money Manager</h3>
-      <p class="lead">Da dove escono i soldi delle spese registrate su ogni conto. Le spese con la carta ether.fi sono già nel suo saldo: registrale su un conto a parte e scegli "Carta ether.fi".</p>
-      <div class="card group" id="wAccounts"></div>
-      <h3 class="h" style="margin-top:6px" id="wFiatHead">Valute sugli exchange</h3>
-      <p class="lead">Euro e dollari fermi su un exchange che non usi per le crypto. Spunta per contarli come conto in banca: escono dal totale crypto ed entrano nei conti. Togli la spunta quando li usi per comprare crypto.</p>
-      <div class="card group" id="wFiat"></div>
-    </div>
+    </details>
+    <details class="sect" id="set-override">
+      <summary><span class="sect-t"><span class="h">Investimenti dall'altra app</span><span class="sect-hint">I totali dei mesi in cui non usavi Money Manager</span></span><svg class="sect-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary>
+      <div class="sect-body">
+        <div class="card group">
+          <p>Totale investito in ETF e crypto nei mesi in cui non lo registravi in Money Manager. Un mese con un importo usa questo numero al posto di quelli dell'app; un mese vuoto usa Money Manager.</p>
+          <div class="ovr" id="ovr"></div>
+          <div class="rule-grid" style="grid-template-columns:minmax(0,1fr) auto;align-items:end"><input type="month" id="ovrNewMonth" aria-label="Mese da aggiungere"><button type="button" class="btn small" id="ovrAdd" style="min-height:44px">Aggiungi mese</button></div>
+        </div>
+      </div>
+    </details>
+    <p class="set-group">Patrimonio</p>
+    <details class="sect" id="set-wealth">
+      <summary><span class="sect-t"><span class="h">Saldi di Poste e Fineco</span><span class="sect-hint">Il punto di partenza dei conti e il giroconto</span></span><svg class="sect-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary>
+      <div class="sect-body">
+        <p class="lead">Da qui il sito calcola quanto hai su Poste e Fineco. Scrivi i saldi di una sera: conto i movimenti dal giorno dopo. Quando controlli i saldi veri, aggiornali qui.</p>
+        <div class="card group">
+          <div class="rule-grid" style="grid-template-columns:repeat(3,minmax(0,1fr));align-items:end">
+            <label class="field-l" for="wDate">Saldi del<input type="date" id="wDate"></label>
+            <label class="field-l" for="wPoste">Poste, €<input type="number" id="wPoste" step="0.01" inputmode="decimal"></label>
+            <label class="field-l" for="wFineco">Fineco, €<input type="number" id="wFineco" step="0.01" inputmode="decimal"></label>
+          </div>
+          <div class="rule-grid" style="grid-template-columns:repeat(3,minmax(0,1fr));align-items:end">
+            <label class="field-l" for="wGiro">Giroconto a Fineco, €<input type="number" id="wGiro" min="0" step="1" inputmode="decimal"></label>
+            <label class="field-l" for="wGiroDay">Il giorno<input type="number" id="wGiroDay" min="1" max="31" step="1" inputmode="numeric"></label>
+            <label class="field-l" for="wFee">Commissione ricarica, €<input type="number" id="wFee" min="0" step="0.01" inputmode="decimal"></label>
+          </div>
+          <p>Il giroconto passa ogni mese da Poste a Fineco. Ogni ricarica di ether.fi esce da Poste con la sua commissione. Gli acquisti di ETF escono da Fineco.</p>
+        </div>
+      </div>
+    </details>
+    <details class="sect" id="set-yield">
+      <summary><span class="sect-t"><span class="h">Conti che rendono</span><span class="sect-hint">Il tasso annuo di ogni conto, per dividere i soldi fermi da quelli che rendono</span></span><svg class="sect-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary>
+      <div class="sect-body">
+        <p class="lead">Scrivi il tasso annuo dei conti che rendono, per esempio gli euro su OKX. Lascia vuoto per i conti fermi. Se il tasso ha una scadenza, scrivila: da quel giorno il conto torna tra quelli fermi e ti avviso.</p>
+        <div class="card group" id="wYield"></div>
+      </div>
+    </details>
+    <details class="sect" id="set-accounts">
+      <summary><span class="sect-t"><span class="h">Conti di Money Manager</span><span class="sect-hint">Da quale conto escono le spese registrate</span></span><svg class="sect-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary>
+      <div class="sect-body">
+        <p class="lead">Da dove escono i soldi delle spese registrate su ogni conto. Le spese con la carta ether.fi sono già nel suo saldo: registrale su un conto a parte e scegli "Carta ether.fi".</p>
+        <div class="card group" id="wAccounts"></div>
+      </div>
+    </details>
+    <details class="sect" id="set-fiat">
+      <summary><span class="sect-t"><span class="h">Valute sugli exchange</span><span class="sect-hint">Euro e dollari da contare come conto in banca</span></span><svg class="sect-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary>
+      <div class="sect-body">
+        <p class="lead">Euro e dollari fermi su un exchange che non usi per le crypto. Spunta per contarli come conto in banca: escono dal totale crypto ed entrano nei conti. Togli la spunta quando li usi per comprare crypto.</p>
+        <div class="card group" id="wFiat"></div>
+      </div>
+    </details>
     <p class="small" style="text-align:center;margin-top:8px"><a href="privacy.html">Privacy</a></p>
   </section>
 </div>

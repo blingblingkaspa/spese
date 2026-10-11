@@ -184,7 +184,7 @@
         if (state.data) setStatus(err && err.code === "offline" ? "" : "warn", srcLine(state.src) + " · " + msg);
         else { setStatus("err", "Nessun dato"); $("needWhy").textContent = msg; $("needFile").hidden = false; }
       })
-      .then(function () { syncing = false; $("reloadBtn").disabled = false; $("refresh").disabled = false; renderAccount(); });
+      .then(function () { syncing = false; $("reloadBtn").disabled = false; $("refresh").disabled = false; renderAccount(); recordWealth(); });
   }
   function openFile(file) {
     if (!file) return;
@@ -298,44 +298,62 @@
     var html = "", total = 0;
     MM.CONTAINERS.forEach(function (c) {
       var cc = r.c[c]; total += cc.avail;
-      var q = quotaInfo(r, c), carry = cc.avail - cc.quota + cc.spent;
-      var ratio = q.quota > 0 ? Math.min(cc.spent / q.quota, 1) : 0, over = q.quota > 0 && cc.spent > q.quota;
-      var left = cap(mName) + ": <b>" + eur0.format(cc.spent) + "</b>";
-      if (over && !q.expected) left += " · " + eur0.format(cc.spent - q.quota) + " oltre la quota";
-      else if (q.quota > 0) left += " di " + (q.expected ? "circa " : "") + eur0.format(q.quota) + (q.expected ? " attesi" : "");
-      else left += r.kind === "missing" ? " · nessuno stipendio" : " · quota con lo stipendio";
-      if (cc.hist) left += " · altra app";
-      var right = idx > 0 || zero(carry) ? "riporto " + signed(carry) : "";
-      var state_ = cc.avail < 0 ? '<span class="alert" aria-hidden="true">!</span>Sei sotto di questa cifra' : (c === "inv" ? "Da investire" : "Disponibile");
+      var q = quotaInfo(r, c), left = q.quota - cc.spent;
+      var ratio = q.quota > 0 ? Math.min(cc.spent / q.quota, 1) : 0;
+      // the big number: what is left of this month's quota (an estimate until the salary arrives)
+      var big, lbl;
+      if (q.quota > 0) {
+        big = (q.expected ? '<span class="env-circa">circa</span>' : "") + eur0.format(left);
+        lbl = left < 0 ? "Oltre la quota di " + mName : (c === "inv" ? "Da investire a " : "Restano a ") + mName;
+      } else { big = eur0.format(-cc.spent); lbl = r.kind === "missing" ? "Speso a " + mName + ", senza stipendio registrato" : "Speso a " + mName + ": la quota arriva con lo stipendio"; }
+      var spentTxt = (c === "inv" ? "Investito" : "Speso") + " <b>" + eur0.format(cc.spent) + "</b>" + (q.quota > 0 ? " di " + (q.expected ? "circa " : "") + eur0.format(q.quota) : "");
+      if (cc.hist) spentTxt += " · altra app";
+      var trips = c === "div" ? tripsOf(cc.items) : 0;
+      if (trips > 0.5) spentTxt += " · viaggi " + eur0.format(trips);
+      // under the line: the balance with the months before, what is already booked, the liquidity
+      var rows = '<span class="env-row"><span>' + (c === "inv" ? "Da investire in tutto" : "Saldo con i mesi prima") + "</span><b>" + eur0.format(cc.avail) + "</b></span>";
+      var bk = isCur ? booked(c) : null;
+      if (bk) rows += '<span class="env-row"><span>Prenotato per ' + bk.when + "</span><b>" + eur0.format(bk.total) + "</b></span>";
+      if (c === "inv") rows += '<span class="env-row"><span>Liquidità per discese, sul conto</span><b>' + eur0.format(r.liq.avail) + "</b></span>";
       html += '<button type="button" class="env" data-c="' + c + '" style="--card:var(--card-' + c + ')">' +
         '<span class="env-head"><span>' + NAMES[c] + '</span><span class="env-share">' + shareText(r, c) + "</span></span>" +
-        '<span class="env-big">' + eur0.format(cc.avail) + "</span>" +
-        '<span class="env-state">' + state_ + "</span>" +
+        '<span class="env-big">' + big + "</span>" +
+        '<span class="env-state">' + lbl + "</span>" +
         '<span class="meter' + (q.expected ? " waiting" : "") + '" aria-hidden="true">' + (ratio ? '<i style="width:' + (ratio * 100).toFixed(1) + '%"></i>' : "") + "</span>" +
-        '<span class="env-foot"><span>' + left + "</span><span>" + right + "</span></span>" +
-        (c === "inv" ? '<span class="env-liq"><span>Liquidità per discese, sul conto</span><b>' + eur0.format(r.liq.avail) + "</b></span>" : "") +
+        '<span class="env-foot"><span>' + spentTxt + "</span></span>" +
+        '<span class="env-rows">' + rows + "</span>" +
         "</button>";
       if (c === "inv") total += r.liq.avail;
     });
     $("envelopes").innerHTML = html;
     $("totalAvail").textContent = eur0.format(total);
     $("totalAvail").className = "num " + (total < 0 ? "neg" : "");
-    var notes = [];
+    // one short line; the details are in each envelope
+    var notes = [], ex = MM.expectedIncome(led, settings);
     if (r.kind === "waiting") {
-      if (prevMode && isCur) notes.push("Lo stipendio di " + mName + " arriva a " + nextName + ": per ora il disponibile conta quello che hai già incassato. Quando lo registri in Money Manager con la categoria Stipendio, la quota di " + mName + " si aggiorna.");
-      else if (prevMode) notes.push("Lo stipendio di " + mName + " non è ancora in Money Manager. Di solito arriva tra il 5 e il 15 di " + nextName + ": quando lo registri, le quote di " + mName + " si aggiornano.");
-      else notes.push("Lo stipendio di " + mName + " non è ancora in Money Manager: il disponibile conta solo i mesi precedenti.");
-      var ex = MM.expectedIncome(led, settings);
-      if (ex.income) notes.push("Le quote attese (le barre a righe) usano " + (ex.from === "real" ? "il tuo stipendio tipico, " + eur0.format(ex.income) : "lo stipendio stimato, " + eur0.format(ex.income)) + ": servono solo a capire a che punto sei, il disponibile non cambia.");
+      var est = ex.income ? ": le quote sono stimate su " + eur0.format(ex.income) + (ex.from === "real" ? ", il tuo stipendio tipico." : ", lo stipendio stimato.") : ".";
+      if (prevMode && isCur) notes.push("Lo stipendio di " + mName + " arriva a " + nextName + est);
+      else if (prevMode) notes.push("Lo stipendio di " + mName + " non è ancora in Money Manager" + est);
+      else notes.push("Lo stipendio di " + mName + " non è ancora in Money Manager" + est);
     }
-    if (r.kind === "est") notes.push("Per questo mese uso lo stipendio stimato (" + eur.format(r.income) + "), perché non hai ancora registrato stipendi in Money Manager.");
-    if (r.kind === "missing") notes.push("Per " + mName + " non c'è nessuno Stipendio registrato" + (prevMode ? " (lo cerco tra le entrate di " + nextName + ")" : "") + ": la quota del mese è zero.");
+    if (r.kind === "est") notes.push("Per " + mName + " uso lo stipendio stimato (" + eur.format(r.income) + "): non hai ancora registrato stipendi in Money Manager.");
+    if (r.kind === "missing") notes.push("Per " + mName + " non c'è nessuno Stipendio registrato" + (prevMode ? " (lo cerco tra le entrate di " + nextName + ")" : "") + ".");
     var oth = led.other.filter(function (e) { return e.month === m; });
-    if (oth.length) notes.push(oth.length + " spese di questo mese sono in categorie fuori dai tre contenitori e non sono conteggiate.");
-    var fut = state.data.future;
-    if (fut.length && m === led.cur) notes.push("Spese con data futura, conteggiate quando arriva la data: " + fut.map(function (e) { return esc(e.text || e.sub) + " " + eur0.format(e.amount) + " il " + fmtDate(e.date); }).join(", ") + ".");
+    if (oth.length) notes.push(oth.length + (oth.length === 1 ? " spesa è in una categoria" : " spese sono in categorie") + " fuori dai tre contenitori e non " + (oth.length === 1 ? "è contata." : "sono contate."));
     $("monthNotes").innerHTML = notes.map(function (t) { return '<p class="note-i">' + ICON_INFO + "<span>" + t + "</span></p>"; }).join("");
     $("monthNotes").hidden = !notes.length;
+  }
+  /* Trips: the Viaggi subcategory of Divertimento, shown apart because they come in big, rare amounts */
+  function isTrip(e) { return e.container === "div" && /viagg/i.test(e.sub || ""); }
+  function tripsOf(items) { return (items || []).reduce(function (t, e) { return t + (isTrip(e) ? e.amount : 0); }, 0); }
+  /* Expenses with a date still to come, for one container: counted when the date arrives */
+  function booked(c) {
+    var list = (state.data.future || []).filter(function (e) { return e.container === c; });
+    if (!list.length) return null;
+    var months = {}; list.forEach(function (e) { months[e.month] = 1; });
+    var ms = Object.keys(months).sort();
+    return { total: list.reduce(function (t, e) { return t + e.amount; }, 0), items: list.sort(function (a, b) { return a.date.localeCompare(b.date); }),
+      when: ms.length === 1 ? monthName(ms[0]) : "i prossimi mesi" };
   }
   function stepMonth(d) {
     var list = state.led.months, i = list.indexOf(state.month) + d;
@@ -362,12 +380,25 @@
     var idx = state.led.months.indexOf(m), q = quotaInfo(r, c), carry = cc.avail - cc.quota + cc.spent;
     $("sheetEyebrow").textContent = cap(MM.monthLong(m)) + " · " + (+r.rule[c] || 0) + "% delle entrate";
     sheetTitle(NAMES[c], cvar(c));
-    var body = '<div class="card calc">' +
+    var body = "";
+    if (q.quota > 0) {
+      var left = q.quota - cc.spent;
+      body += '<div class="card calc"><div><span>Quota di ' + monthName(m) + (q.expected ? " (stima)" : "") + "</span><b>" + eur0.format(q.quota) + "</b></div>" +
+        "<div><span>Speso a " + monthName(m) + "</span><b>" + signed(-cc.spent) + "</b>" + (c === "div" && tripsOf(cc.items) > 0.5 ? "<small>Di cui viaggi " + eur0.format(tripsOf(cc.items)) + ".</small>" : "") + "</div>" +
+        '<div class="tot"><span>' + (left < 0 ? "Oltre la quota" : c === "inv" ? "Da investire a " + monthName(m) : "Restano a " + monthName(m)) + '</span><b class="' + (left < 0 ? "neg" : "") + '">' + eur0.format(left) + "</b></div></div>";
+    }
+    body += '<div class="card calc">' +
       "<div><span>" + (idx > 0 ? "Riporto da " + MM.monthLong(state.led.months[idx - 1]).split(" ")[0] : "Riporto") + '</span><b class="' + (carry < 0 ? "neg" : "") + '">' + signed(carry) + "</b>" + (idx > 0 ? "<small>Quello che restava a fine mese, avanzi e debiti compresi.</small>" : "") + "</div>" +
       "<div><span>Quota di " + monthName(m) + "</span><b>" + signed(cc.quota) + "</b>" +
         (q.expected ? "<small>Lo stipendio non è ancora arrivato: la quota sarà di circa " + eur0.format(q.quota) + ".</small>" : cc.quota ? "" : "<small>Nessuno stipendio per questo mese.</small>") + "</div>" +
       "<div><span>Speso a " + monthName(m) + "</span><b>" + signed(-cc.spent) + "</b>" + (cc.hist ? "<small>Totale registrato nell'altra app.</small>" : "") + "</div>" +
-      '<div class="tot"><span>' + (c === "inv" ? "Da investire" : "Disponibile") + '</span><b class="' + (cc.avail < 0 ? "neg" : "") + '">' + eur0.format(cc.avail) + "</b></div></div>";
+      '<div class="tot"><span>' + (c === "inv" ? "Da investire in tutto" : "Saldo con i mesi prima") + '</span><b class="' + (cc.avail < 0 ? "neg" : "") + '">' + eur0.format(cc.avail) + "</b></div></div>";
+    var bk = m === state.led.cur ? booked(c) : null;
+    if (bk) {
+      body += '<div class="card" style="display:grid;gap:2px;padding-block:12px 6px"><h3 class="h">Prenotato per ' + bk.when + "</h3>" +
+        '<p class="small">Spese con una data che deve ancora arrivare: le conto quando arriva la data. Dopo, il saldo sarà di ' + eur0.format(cc.avail - bk.total) + ".</p>" +
+        mvRows(bk.items.map(function (e) { return { e: e, fut: true }; }), "compact") + "</div>";
+    }
 
     if (c === "inv" && d.split) {
       var sp = d.split, lab = { etf: "PAC ETF", crypto: "Crypto" }, lq = d.liq;
@@ -383,7 +414,7 @@
       if (d.ignored) body += '<div class="card note-i">' + ICON_INFO + "<span>Per " + MM.monthLong(m) + " uso il totale dell'altra app (" + eur.format(cc.spent) + "). I " + eur.format(d.ignored) + " registrati in Money Manager in questo mese non sono conteggiati: svuota il mese in Impostazioni per usarli.</span></div>";
     }
 
-    body += '<div class="card" style="display:grid;gap:8px"><h3 class="h">' + (c === "inv" ? "Da investire" : "Disponibile") + ' a fine mese</h3><p class="small">Com\'è cambiato mese per mese. Tocca una colonna per i numeri.</p><div id="sheetChart"></div></div>';
+    body += '<div class="card" style="display:grid;gap:8px"><h3 class="h">' + (c === "inv" ? "Da investire" : "Saldo") + ' a fine mese</h3><p class="small">Com\'è cambiato mese per mese, con i mesi prima. Tocca una colonna per i numeri.</p><div id="sheetChart"></div></div>';
 
     var list = d.list, maxM = Math.max.apply(null, list.map(function (s) { return s.month; }).concat([1]));
     body += '<div class="card" style="display:grid;gap:2px"><h3 class="h">Categorie</h3>' +
@@ -404,12 +435,12 @@
       labels: rows.map(function (x) { return MM.monthLabel(x.month); }),
       values: rows.map(function (x) { return MM.round2(x.c[c].avail); }),
       color: cvar(c), negColor: "var(--bad)", highlight: idx, height: 150,
-      fmtAxis: n0, ariaLabel: "Disponibile a fine mese, " + NAMES[c],
+      fmtAxis: n0, ariaLabel: "Saldo a fine mese, " + NAMES[c],
       desc: rows.map(function (x) { return MM.monthLong(x.month) + ": " + eur0.format(x.c[c].avail); }).join("; "),
       tip: function (i) {
         var x = rows[i];
         return { title: cap(MM.monthLong(x.month)), rows: [
-          { value: eur0.format(x.c[c].avail), label: c === "inv" ? "da investire" : "disponibile", color: x.c[c].avail < 0 ? "var(--bad)" : cvar(c) },
+          { value: eur0.format(x.c[c].avail), label: c === "inv" ? "da investire" : "saldo", color: x.c[c].avail < 0 ? "var(--bad)" : cvar(c) },
           { value: eur0.format(x.c[c].spent), label: "speso" },
           { value: x.c[c].quota ? eur0.format(x.c[c].quota) : "—", label: "quota" }] };
       }
@@ -473,10 +504,18 @@
     var A = periodData(), M = A.M, months = A.months, cur = months.indexOf(A.cur);
     var labels = months.map(function (m) { return MM.monthLabel(m); });
     var host = $("trendCont");
+    var T = tripsMonthly(M);
+    function overText(n) { return n ? (n === 1 ? "1 mese sopra la quota" : n + " mesi sopra la quota") : "nessun mese sopra la quota"; }
     host.innerHTML = MM.CONTAINERS.map(function (c) {
       var k = M.cont[c];
-      var overN = A.M.closed.filter(function (m) { return k.quota[m] > 0 && k.spent[m] > k.quota[m]; }).length;
-      var foot = (k.quotaAvg ? "Quota media " + eur0.format(k.quotaAvg) + " · " : "") + (overN ? (overN === 1 ? "1 mese sopra la quota" : overN + " mesi sopra la quota") : "nessun mese sopra la quota");
+      var overN = M.closed.filter(function (m) { return k.quota[m] > 0 && k.spent[m] > k.quota[m]; }).length;
+      var foot = (k.quotaAvg ? "Quota media " + eur0.format(k.quotaAvg) + " · " : "") + overText(overN);
+      if (c === "div" && T.avg > 0.5) {
+        var overNT = M.closed.filter(function (m) { return k.quota[m] > 0 && k.spent[m] - (T.m[m] || 0) > k.quota[m]; }).length;
+        foot = '<span class="legend" style="margin-bottom:6px"><span><i class="lg" style="background:var(--c-div)"></i>Senza viaggi <b>' + eur0.format(k.avg - T.avg) + "</b> al mese</span>" +
+          '<span><i class="lg" style="background:var(--trip)"></i>Viaggi <b>' + eur0.format(T.avg) + "</b> al mese</span></span>" +
+          foot + ". Senza viaggi: " + overText(overNT) + ".";
+      }
       return '<div class="card trend"><div class="trend-head"><span class="nm"><i class="cdot" style="--c:' + cvar(c) + '"></i>' + NAMES[c] + '</span><span class="avg"><b>' + eur0.format(k.avg) + "</b> al mese</span></div>" +
         '<div id="tc-' + c + '"></div><p class="trend-foot">' + foot + "</p></div>";
     }).join("");
@@ -488,10 +527,12 @@
       Charts.columns($("tc-" + c), {
         labels: labels, values: months.map(function (m) { return MM.round2(k.spent[m]); }), ghost: ghost, ghostKind: kinds,
         color: cvar(c), current: cur >= 0 ? cur : null, height: 150, fmtAxis: n0,
+        part: c === "div" ? months.map(function (m) { return MM.round2(T.m[m] || 0); }) : null, partColor: "var(--trip)",
         ariaLabel: NAMES[c] + ": speso e quota mese per mese",
         desc: months.map(function (m) { return MM.monthLong(m) + ": speso " + eur0.format(k.spent[m]) + ", quota " + eur0.format(k.quota[m]); }).join("; "),
         tip: function (i) {
           var m = months[i], rows = [{ value: eur0.format(k.spent[m]), label: "speso" + (i === cur ? " finora" : ""), color: cvar(c) }];
+          if (c === "div" && T.m[m] > 0.5) rows.push({ value: eur0.format(T.m[m]), label: "di cui viaggi", color: "var(--trip)" });
           if (k.quota[m] > 0) {
             rows.push({ value: eur0.format(k.quota[m]), label: "quota" });
             rows.push({ value: eur0.format(Math.abs(k.quota[m] - k.spent[m])), label: k.quota[m] - k.spent[m] >= 0 ? "avanzati" : "oltre la quota" });
@@ -502,6 +543,16 @@
       });
     });
     renderHeat(A);
+  }
+  /* Trips month by month and on average, from the subcategories of Divertimento named Viaggi */
+  function tripsMonthly(M) {
+    var out = { m: {}, avg: 0 };
+    M.subs.forEach(function (x) {
+      if (x.container !== "div" || !/viagg/i.test(x.sub || "")) return;
+      Object.keys(x.m).forEach(function (m) { out.m[m] = (out.m[m] || 0) + x.m[m]; });
+      out.avg += x.avg;
+    });
+    return out;
   }
   var BINS = [25, 50, 100, 250, 500];
   function level(v) { if (!(v > 0.5)) return 0; for (var i = 0; i < BINS.length; i++) if (v <= BINS[i]) return i + 1; return 6; }
@@ -538,6 +589,10 @@
     state.an = a;
     if (a.avgMonth === null) $("avgHero").innerHTML = "La media si calcola quando il primo mese è chiuso.";
     else $("avgHero").innerHTML = "In media spendi<b>" + eur0.format(a.avgMonth) + "</b>al mese, su " + (a.closed.length === 1 ? "1 mese chiuso" : a.closed.length + " mesi chiusi") + " (" + A.closedText + ")" + ($("inv").checked ? ", investimenti compresi." : ".");
+    // the conclusion: spending (Essenziali + Divertimento) against its share of the salary, and the investments
+    var B = budgetFacts(M);
+    if (a.avgMonth !== null && B.spendQuota) $("avgHero").innerHTML += '<span class="avg-say">' + (B.gap > 0.5 ? "Sono <b>" + eur0.format(B.gap) + " in più</b> della quota per le spese (" + eur0.format(B.spendQuota) + ")." :
+      B.gap < -0.5 ? "Restano <b>" + eur0.format(-B.gap) + "</b> della quota per le spese (" + eur0.format(B.spendQuota) + ")." : "Sei in linea con la quota per le spese (" + eur0.format(B.spendQuota) + ").") + "</span>";
     // containers: average spent against the average quota
     var rows = a.macroList.map(function (m) { var c = m.container; return { m: m, c: c, q: c && M.cont[c] ? M.cont[c].quotaAvg : 0 }; });
     var max = Math.max.apply(null, rows.map(function (x) { return Math.max(x.m.avg, x.q); }).concat([1]));
@@ -546,7 +601,8 @@
       var gap = x.q ? x.m.avg - x.q : null;
       return '<div class="bl" style="--c:' + cvar(x.c) + '"><div class="bl-t"><span class="nm"><i class="cdot" style="--c:' + cvar(x.c) + '"></i>' + esc(x.m.macro) + '</span><span class="v"><b>' + eur0.format(x.m.avg) + "</b>" + (x.q ? " di " + eur0.format(x.q) : "") + "</span></div>" +
         '<div class="bl-bar">' + (x.q ? '<span class="q" style="width:' + w(x.q) + '"></span>' : "") + '<span class="s" style="width:' + w(x.m.avg) + '"></span>' + (x.q ? '<span class="m" style="left:calc(' + w(x.q) + ' - 1px)"></span>' : "") + "</div>" +
-        (gap !== null ? '<p class="bl-n">' + (gap > 0 ? "In media " + eur0.format(gap) + " oltre la quota" : "In media avanzano " + eur0.format(-gap)) + "</p>" : "") + "</div>";
+        (gap !== null ? '<p class="bl-n">' + (gap > 0 ? "In media " + eur0.format(gap) + " oltre la quota" : "In media avanzano " + eur0.format(-gap)) +
+          (x.c === "div" && B.trips > 0.5 ? ". Di cui viaggi " + eur0.format(B.trips) + ": senza viaggi " + eur0.format(x.m.avg - B.trips) + (x.q ? ", " + (x.m.avg - B.trips > x.q ? "sopra" : "sotto") + " la quota" : "") : "") + "</p>" : "") + "</div>";
     }).join("") + '<p class="bl-n">Barra piena: la media al mese. Barra chiara e tacca: la quota media dello stipendio.</p>' : '<p class="empty">Nessuna spesa nel periodo.</p>';
 
     // categories
@@ -576,10 +632,23 @@
 
     // budget summary
     var inc = avgIncome(), rule = MM.ruleAt(settings.rules, state.led.cur), spendPct = (+rule.ess || 0) + (+rule.div || 0);
-    $("planSum").innerHTML = '<div class="hl"><span>Spesa media al mese</span><b>' + (a.avgMonth === null ? "—" : eur0.format(a.avgMonth)) + "</b></div>" +
-      "<div><span>" + (a.anyTarget ? "Con i tuoi obiettivi" : "Prevista, senza obiettivi") + "</span><b>" + eur0.format(a.planned) + "</b></div>" +
+    var say = [];
+    if (a.closed.length && B.spendQuota) say.push(B.gap > 0.5 ? "In media spendi <b>" + eur0.format(B.gap) + " al mese più della quota</b> (" + eur0.format(B.spend) + " contro " + eur0.format(B.spendQuota) + ")." :
+      "In media spendi <b>" + eur0.format(Math.abs(B.gap)) + " al mese meno della quota</b> (" + eur0.format(B.spend) + " contro " + eur0.format(B.spendQuota) + ").");
+    if (a.closed.length && B.invQuota) say.push("Investi in media <b>" + eur0.format(B.inv) + "</b> su " + eur0.format(B.invQuota) + (B.waiting > 0.5 ? ": <b>" + eur0.format(B.waiting) + "</b> aspettano di essere investiti." : "."));
+    $("planSum").innerHTML = (say.length ? '<p class="plan-say">' + say.join(" ") + "</p>" : "") +
+      '<div class="hl"><span>Spesa media al mese</span><b>' + (a.avgMonth === null ? "—" : eur0.format(a.avgMonth)) + "</b></div>" +
+      (a.anyTarget ? "<div><span>Con i tuoi obiettivi</span><b>" + eur0.format(a.planned) + "</b></div>" : "") +
       (inc ? "<div><span>Entrate medie al mese</span><b>" + eur0.format(inc) + "</b></div><div><span>Quota per le spese (" + spendPct + "%)</span><b>" + eur0.format(inc * spendPct / 100) + "</b></div>" : "") +
+      (B.invQuota ? "<div><span>Investito in media al mese</span><b>" + eur0.format(B.inv) + " di " + eur0.format(B.invQuota) + "</b></div>" : "") +
       '<div><span>Spese da proteggere <span class="star">★</span></span><b>' + eur0.format(a.protAvg) + "</b></div>";
+  }
+  /* Averages over the period's closed months, from the same numbers as the charts */
+  function budgetFacts(M) {
+    var c = M.cont, last = state.led.rows[state.led.rows.length - 1];
+    var spend = c.ess.avg + c.div.avg, spendQuota = c.ess.quotaAvg + c.div.quotaAvg;
+    return { spend: spend, spendQuota: spendQuota, gap: spend - spendQuota, inv: c.inv.avg, invQuota: c.inv.quotaAvg,
+      waiting: last ? last.c.inv.avail : 0, trips: tripsMonthly(M).avg };
   }
 
   /* ---------- Movimenti ---------- */
@@ -663,7 +732,7 @@
       if (e && e.code === "auth") return; // the main sync shows the sign-in
       state.pf.err = e && e.code === "limit" ? "Google ha rifiutato la richiesta per troppi accessi: riprovo al prossimo aggiornamento." :
         e instanceof Error ? e.message : "Non riesco a leggere " + PF_FILE + " dal Drive.";
-    }).then(function () { state.pf.loading = false; pfRender(); });
+    }).then(function () { state.pf.loading = false; pfRender(); recordWealth(); });
   }
   function refreshPrices(force) {
     var pf = state.pf;
@@ -673,7 +742,7 @@
     pf.priceLoading = true;
     PF.fetchPrices(doc).then(function (p) { pf.prices = p; pf.priceErr = null; })
       .catch(function (e) { pf.priceErr = (e && e.code) || "http"; })
-      .then(function () { pf.priceLoading = false; pfRender(); });
+      .then(function () { pf.priceLoading = false; pfRender(); recordWealth(); });
   }
   function openPfFile(file) {
     if (!file) return;
@@ -703,8 +772,10 @@
   var K = { cur: "usd", rate: null };
   function pfCur() { return load(CUR_KEY) === "eur" ? "eur" : "usd"; }
   function inCur(x) { return K.cur === "eur" ? x / K.rate : x; }
-  function money(x) { x = inCur(x); if (Math.abs(x) < 0.005) x = 0; return minus((K.cur === "eur" ? (Math.abs(x) >= 1000 ? eur0F : eur2F) : (Math.abs(x) >= 1000 ? usdF0 : usdF2)).format(x)); }
-  function money0(x) { x = zero(inCur(x)); return minus((K.cur === "eur" ? eur0F : usdF0).format(x)); }
+  function money(x) { x = inCur(x); if (Math.abs(x) < 0.005) x = 0; return minus((K.cur === "eur" ? eur2F : usdF2).format(x)); }
+  function money0(x) { return money(x); }
+  /* A big amount with its cents set smaller */
+  function bigNum(str) { var i = str.lastIndexOf(","); return i < 0 ? esc(str) : esc(str.slice(0, i)) + '<span class="dec">' + esc(str.slice(i)) + "</span>"; }
   function mprice(x) {
     x = inCur(x); var a = Math.abs(x), F = K.cur === "eur" ? [eur0F, eur2F, " €"] : [usdF0, usdF2, " $"];
     return minus(a >= 1000 ? F[0].format(x) : a >= 1 ? F[1].format(x) : prF.format(x) + F[2]);
@@ -775,10 +846,12 @@
     $("pfFresh").innerHTML = (pf.doc ? "Quantità di " + esc(when(pf.doc.creato)) : "Solo quantità inserite qui") + " · prezzi " + (priceAt ? (Date.now() - priceAt < 90000 ? "di adesso" : "di " + esc(when(new Date(priceAt).toISOString()))) : pf.priceLoading ? "in arrivo…" : "dell'ultimo aggiornamento del PC");
 
     // the headline in the chosen currency, the other one under it
-    var other = K.rate ? (K.cur === "eur" ? usd0(R.total) : eur0.format(R.total / K.rate)) : null;
-    var h = '<div class="card pf-hero"><span class="lbl">In tutto</span><b class="big">' + money0(R.total) + "</b>" +
+    var other = K.rate ? (K.cur === "eur" ? minus(usdF2.format(R.total)) : minus(eur2F.format(R.total / K.rate))) : null;
+    var hc = histChange("cu", R.total);
+    var h = '<div class="card pf-hero"><span class="lbl">In tutto</span><b class="big">' + bigNum(money(R.total)) + "</b>" +
       '<span class="sub">' + (other ? "<span>circa " + other + "</span>" : "") +
-      (R.change !== null ? '<span class="' + (R.change >= 0 ? "pos" : "neg") + '"><b>' + pctTxt(R.changePct * 100) + "</b> · " + (R.change >= 0 ? "+" : "") + money0(R.change) + " in 24 ore</span>" : "") + "</span>";
+      (R.change !== null ? '<span class="' + (R.change >= 0 ? "pos" : "neg") + '"><b>' + pctTxt(R.changePct * 100) + "</b> · " + (R.change >= 0 ? "+" : "") + money0(R.change) + " in 24 ore</span>" : "") +
+      (hc ? '<span class="' + (hc.diff >= 0 ? "pos" : "neg") + '"><b>' + pctTxt(hc.pct * 100) + "</b> · " + (hc.diff >= 0 ? "+" : "") + money(hc.diff) + " " + hc.label + "</span>" : "") + "</span>";
     if (R.total > 0) {
       var cp = Math.max(0, Math.min(1, R.cash / R.total));
       h += '<div class="pf-cash"><div class="pf-cash-t"><span>Stablecoin e valute</span><b>' + money0(R.cash) + " · " + share(cp) + '</b></div><span class="pf-meter" aria-hidden="true"><i style="width:' + (cp * 100).toFixed(1) + '%"></i></span></div>';
@@ -834,10 +907,17 @@
 
   /* Quantities typed by hand, saved with the settings in Drive: for apps that cannot be read automatically */
   function manualCard() {
-    var rows = settings.pfManual || [];
-    var h = '<div class="block"><div class="block-head"><h2 class="h">Inseriti a mano</h2><button type="button" class="btn small" data-pf="add">Aggiungi</button></div>' +
-      '<p class="lead">Per le app che non si possono leggere da sole, come Kast. Scrivi il posto, la moneta (USD, USDC, EURC…) e la quantità: si salva nel tuo Drive.</p>';
-    if (!rows.length) return h + "</div>";
+    var rows = settings.pfManual || [], edit = !!state.pf.editManual;
+    var btn = edit ? '<button type="button" class="btn small primary" data-pf="done">Fatto</button>' : rows.length ? '<button type="button" class="btn small" data-pf="edit">Modifica</button>' : '<button type="button" class="btn small" data-pf="add">Aggiungi</button>';
+    var h = '<div class="block"><div class="block-head"><h2 class="h">Inseriti a mano</h2>' + btn + "</div>" +
+      '<p class="lead">Per le app che non si possono leggere da sole, come Kast' + (edit ? ". Scrivi il posto, la moneta (USD, USDC, EURC…) e la quantità: si salva nel tuo Drive." : ".") + "</p>";
+    if (!edit) {
+      if (!rows.length) return h + "</div>";
+      return h + '<div class="card pf-list">' + rows.map(function (m) {
+        return '<div class="w-ro"><span>' + esc(m.posto || "—") + (m.aggiornato ? " <small>aggiornato " + esc(shortDate(m.aggiornato)) + "</small>" : "") + "</span><b>" + (m.quantita !== "" && m.quantita !== undefined ? qty(+m.quantita) : "—") + " " + esc(m.simbolo || "") + "</b></div>";
+      }).join("") + "</div></div>";
+    }
+    if (!rows.length) return h + '<button type="button" class="btn small" data-pf="add">Aggiungi una riga</button></div>';
     h += '<div class="card pf-man"><div class="pf-man-r pf-man-h" aria-hidden="true"><span>Posto</span><span>Moneta</span><span>Quantità</span><span></span></div>';
     rows.forEach(function (m, i) {
       h += '<div class="pf-man-r">' +
@@ -846,7 +926,7 @@
         '<input type="text" inputmode="decimal" data-mi="' + i + '" data-mk="quantita" value="' + (m.quantita !== undefined && m.quantita !== "" ? esc(String(m.quantita).replace(".", ",")) : "") + '" placeholder="0" aria-label="Quantità" autocomplete="off">' +
         '<button type="button" class="iconbtn" data-pf="del" data-mi="' + i + '" aria-label="Elimina la riga"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg></button></div>';
     });
-    return h + "</div></div>";
+    return h + '<button type="button" class="btn small" data-pf="add" style="justify-self:start">Aggiungi una riga</button></div></div>';
   }
   function editManual(i, key, value) {
     var rows = settings.pfManual = (settings.pfManual || []).slice(), m = rows[i];
@@ -859,33 +939,99 @@
   }
 
   /* ---------- Patrimonio: crypto, ETFs and the bank accounts together ---------- */
-  var W_CUR_KEY = "mm-w-cur", W = { level: null, dirty: false }, WK = { cur: "eur", rate: null };
+  var W_CUR_KEY = "mm-w-cur", W = { level: null, dirty: false, editEtf: false }, WK = { cur: "eur", rate: null };
   var SRC_LABEL = { poste: "Poste", fineco: "Fineco", etherfi: "Carta ether.fi (già nel saldo)", none: "Non contare" };
   function wCur() { return load(W_CUR_KEY) === "usd" ? "usd" : "eur"; }
   function wConv(x) { return WK.cur === "usd" ? x * WK.rate : x; }
-  function wm(x) { var v = wConv(x); if (Math.abs(v) < 0.005) v = 0; return minus((WK.cur === "usd" ? (Math.abs(v) >= 1000 ? usdF0 : usdF2) : (Math.abs(v) >= 1000 ? eur0F : eur2F)).format(v)); }
-  function wm0(x) { return minus((WK.cur === "usd" ? usdF0 : eur0F).format(zero(wConv(x)))); }
+  /* Amounts on this page always with their cents */
   function wm2(x) { var v = wConv(x); if (Math.abs(v) < 0.005) v = 0; return minus((WK.cur === "usd" ? usdF2 : eur2F).format(v)); }
+  function wm(x) { return wm2(x); }
+  function wm0(x) { return wm2(x); }
   function wSet() { return settings.wealth || {}; }
   function saveWealth(patch) { settings.wealth = Object.assign({}, wSet(), patch); saveSettings(); }
   function editingIn(box) { var a = document.activeElement; return !!(a && a.tagName === "INPUT" && a.type === "text" && box.contains(a)); }
   function shortDate(d) { return d ? new Date(d.length > 10 ? d : d + "T12:00:00").toLocaleDateString("it-IT", { day: "numeric", month: "short" }) : ""; }
+  function longDate(d) { return d ? new Date(d.length > 10 ? d : d + "T12:00:00").toLocaleDateString("it-IT", { day: "numeric", month: "short", year: "numeric" }) : ""; }
+  function daysBetween(a, b) { return Math.round((new Date(b + "T12:00:00") - new Date(a + "T12:00:00")) / 86400000); }
 
+  /* Where each account stands: what it earns (Impostazioni › Patrimonio › Conti che rendono) */
+  function yieldOf(key) { var y = (wSet().yield || {})[key] || {}; return { rate: +y.rate > 0 ? +y.rate : 0, until: /^\d{4}-\d{2}-\d{2}$/.test(y.until || "") ? y.until : "" }; }
+
+  function yieldTag(key) {
+    var y = yieldOf(key);
+    if (!y.rate) return "fermo";
+    if (y.until && y.until < today()) return pfFlag("tasso finito il " + shortDate(y.until), true);
+    return "tasso " + String(y.rate).replace(".", ",") + "%" + (y.until ? " fino al " + esc(shortDate(y.until)) : "");
+  }
   function wealthData() {
-    var pf = state.pf, split = pfSplit(), doc = split.doc, w = wSet();
+    var pf = state.pf, split = pfSplit(), doc = split.doc, w = wSet(), day = today();
     var R = doc ? PF.compute(doc, pf.prices) : null;
     var rate = (R && R.eurUsd) || (pf.prices && pf.prices.eurUsd) || (pf.doc && pf.doc.eur_usd) || null;
-    var bk = PF.banks(state.rows, w, (pf.doc && pf.doc.ricariche) || [], today());
+    var bk = PF.banks(state.rows, w, (pf.doc && pf.doc.ricariche) || [], day);
     var et = PF.etfs(pf.doc, w.etf, rate);
     var crypto = R && rate ? R.total / rate : 0;
     var etf = et.reduce(function (t, e) { return t + e.value; }, 0);
     var P = bk.banks.poste, F = bk.banks.fineco;
-    var coins = R && rate ? R.coins.filter(function (c) { return Math.abs(c.value / rate) >= 0.5; }).map(function (c) { return { label: c.sym, value: c.value / rate }; }) : [];
     // currencies on an exchange counted as a bank account (for example the euros parked on OKX)
     var ex = split.bank.map(function (b) { b.eur = PF.fiatEur(doc, pf.prices, b.sym, b.qty, rate); return b; });
     var exTot = ex.reduce(function (t, b) { return t + (b.eur || 0); }, 0);
     var conti = (bk.set ? P.value + F.value : 0) + exTot;
-    return { R: R, rate: rate, bk: bk, et: et, crypto: crypto, etf: etf, coins: coins, ex: ex, exTot: exTot, conti: conti, total: crypto + etf + conti };
+    // the accounts one by one, with what they earn
+    var accs = [];
+    if (bk.set) { accs.push({ key: "poste", name: "Poste", value: P.value }); accs.push({ key: "fineco", name: "Fineco", value: F.value }); }
+    ex.forEach(function (b) { accs.push({ key: b.key, name: b.placeName + " · " + b.sym, value: b.eur || 0 }); });
+    var yieldTot = 0, interest = 0;
+    accs.forEach(function (a) {
+      var y = yieldOf(a.key);
+      a.rate = y.rate; a.until = y.until; a.expired = !!(y.until && y.until < day); a.earning = y.rate > 0 && !a.expired;
+      var days = a.until ? Math.max(0, Math.min(365, daysBetween(day, a.until))) : 365;
+      a.interest = a.earning ? Math.max(0, a.value) * a.rate / 100 * days / 365 : 0;
+      if (a.earning) yieldTot += a.value;
+      interest += a.interest;
+    });
+    // stablecoins and currencies still counted with the crypto: money ready to use, not invested
+    var coins = R && rate ? R.coins.filter(function (c) { return Math.abs(c.value / rate) >= 0.5; }).map(function (c) { return { label: c.sym, value: c.value / rate }; }) : [];
+    var stable = R && rate ? R.cash / rate : 0, cryptoVol = crypto - stable;
+    var liquidity = conti + stable, invested = etf + cryptoVol;
+    return { R: R, rate: rate, bk: bk, et: et, crypto: crypto, etf: etf, coins: coins, ex: ex, exTot: exTot, conti: conti, total: crypto + etf + conti,
+      accs: accs, yieldTot: yieldTot, idleTot: conti - yieldTot, interest: interest, stable: stable, cryptoVol: cryptoVol, liquidity: liquidity, invested: invested };
+  }
+
+  /* ---------- History: one value a day, saved with the settings in Drive ---------- */
+  function r2(x) { return Math.round(x * 100) / 100; }
+  /* Daily points for the last 400 days, one a month before that */
+  function thinHist(h) {
+    var cut = MM.addMonths(today().slice(0, 7), -13) + "-01", byMonth = {}, out = [];
+    h.forEach(function (p) { if (p.d < cut) byMonth[p.d.slice(0, 7)] = p; else out.push(p); });
+    return Object.keys(byMonth).sort().map(function (k) { return byMonth[k]; }).concat(out);
+  }
+  /* Saved only with fresh, complete numbers: settings already synced with Drive, the PC file and the backup read from Drive, the start balances written */
+  function recordWealth() {
+    try {
+      if (remoteState !== "ok" || !state.rows || !state.src || state.src.via !== "drive") return;
+      var pf = state.pf; if (!pf.doc || !pf.file || pf.file.via !== "drive") return;
+      if (!((Date.now() - new Date(pf.doc.creato).getTime()) / 3600000 < 6)) return;
+      var D = wealthData(); if (!D.bk.set || !D.rate || !(D.total > 0) || !D.R) return;
+      var day = today(), hist = (settings.wealthHist || []).filter(function (p) { return p && p.d && isFinite(+p.t); }).sort(function (a, b) { return a.d < b.d ? -1 : a.d > b.d ? 1 : 0; });
+      var last = hist[hist.length - 1];
+      if (last && last.d === day && Date.now() - new Date(last.at || 0).getTime() < 2 * 3600000) return;
+      var pt = { d: day, t: r2(D.total), l: r2(D.liquidity), i: r2(D.invested), cu: r2(D.R.total), at: new Date().toISOString() };
+      if (last && last.d === day) hist[hist.length - 1] = pt; else hist.push(pt);
+      settings.wealthHist = thinHist(hist);
+      saveSettings();
+      if (state.view === "patrimonio") renderWealth();
+    } catch (e) {}
+  }
+  /* The change against a year ago (a point between 350 and 380 days back), otherwise since the first day saved */
+  function histChange(field, now) {
+    var h = (settings.wealthHist || []).filter(function (p) { return isFinite(+p[field]) && +p[field] > 0; }), day = today();
+    if (!h.length || !(now > 0)) return null;
+    var best = null;
+    h.forEach(function (p) { var n = daysBetween(p.d, day); if (n >= 350 && n <= 380 && (!best || Math.abs(n - 365) < Math.abs(daysBetween(best.d, day) - 365))) best = p; });
+    var label = "in un anno";
+    if (!best) { best = h[0]; if (daysBetween(best.d, day) < 1) return null; label = "dal " + shortDate(best.d); }
+    var then = +best[field];
+    return { pct: (now - then) / then, diff: now - then, label: label, from: best.d };
   }
 
   /* A donut: one path per slice, a 2px surface gap between them */
@@ -933,9 +1079,12 @@
     document.querySelectorAll("#wCur button").forEach(function (b) { b.setAttribute("aria-pressed", String(b.dataset.cur === WK.cur)); });
     $("wFresh").textContent = bk.set ? "Conti calcolati dal " + shortDate(bk.from) + (state.pf.doc ? " · crypto di " + when(state.pf.doc.creato) : "") : "Mancano i saldi di partenza di Poste e Fineco";
 
-    var other = D.rate ? (WK.cur === "eur" ? usd0(D.total * D.rate) : eur0.format(D.total)) : null;
-    var h = '<div class="card pf-hero"><span class="lbl">In tutto</span><b class="big">' + wm0(D.total) + "</b>" +
-      '<span class="sub">' + (other ? "<span>circa " + other + "</span>" : "") + "<span>Conti <b>" + wm0(D.conti) + "</b></span><span>Investito <b>" + wm0(D.crypto + D.etf) + "</b></span></span></div>";
+    // the total, in the chosen currency with the other under it, and how it changed
+    var other = D.rate ? (WK.cur === "eur" ? minus(usdF2.format(D.total * D.rate)) : minus(eur2F.format(D.total))) : null;
+    var hc = histChange("t", D.total);
+    var h = '<div class="card pf-hero"><span class="lbl">In tutto</span><b class="big">' + bigNum(wm2(D.total)) + "</b>" +
+      '<span class="sub">' + (other ? "<span>circa " + other + "</span>" : "") + "<span>Liquidità <b>" + wm2(D.liquidity) + "</b></span><span>Investito <b>" + wm2(D.invested) + "</b></span>" +
+      (hc ? '<span class="' + (hc.diff >= 0 ? "pos" : "neg") + '"><b>' + pctTxt(hc.pct * 100) + "</b> · " + (hc.diff >= 0 ? "+" : "") + wm2(hc.diff) + " " + hc.label + "</span>" : "") + "</span></div>";
 
     // the donut: what you have by kind, then inside one kind
     var top = [{ key: "conti", label: "Conti", value: D.conti, color: "var(--s1)", note: bk.set ? "" : "da scrivere" },
@@ -949,22 +1098,37 @@
     else if (lvl === "crypto") { slices = topN(D.coins, 6, "monete"); title = "Crypto"; }
     else { slices = top; title = "Dove sono"; lvl = null; }
     var tot = slices.reduce(function (t, s) { return t + Math.max(0, s.value); }, 0);
-    mid = wm0(lvl === "crypto" ? D.crypto : lvl ? slices.reduce(function (t, s) { return t + s.value; }, 0) : D.total); midLabel = lvl ? "in " + title.toLowerCase() : "in tutto";
+    mid = bigNum(wm0(lvl === "crypto" ? D.crypto : lvl ? slices.reduce(function (t, s) { return t + s.value; }, 0) : D.total)); midLabel = lvl ? "in " + title.toLowerCase() : "in tutto";
     h += '<div class="card w-chart"><div class="w-chart-head">' + (lvl ? '<button type="button" class="w-back" data-w="back"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m15 6-6 6 6 6"/></svg>Tutto</button>' : "") +
       '<h2 class="h">' + title + "</h2></div>" + donut(slices, mid, midLabel, !lvl) + legend(slices, tot, !lvl) +
       '<p class="small">' + (lvl ? (lvl === "crypto" ? 'Il dettaglio di ogni moneta è nella scheda <button type="button" class="linkbtn" data-w="open-crypto">Crypto</button>.' : "Tocca \"Tutto\" per tornare indietro.") : "Tocca una fetta per vedere com'è divisa.") + "</p></div>";
 
+    // the total over time
+    var hist = (settings.wealthHist || []).filter(function (p) { return isFinite(+p.t); });
+    h += '<div class="card w-hist"><div class="block-head"><h2 class="h">Nel tempo</h2>' + (hist.length ? '<span class="small">' + hist.length + (hist.length === 1 ? " giorno salvato" : " giorni salvati") + "</span>" : "") + "</div>";
+    if (hist.length < 2) h += '<p class="small">Da oggi il sito salva il totale una volta al giorno, quando apri l\'app collegata a Google. Tra qualche giorno qui vedi come cambia; da ' +
+      esc(longDate(MM.addMonths((hist[0] ? hist[0].d : today()).slice(0, 7), 12) + (hist[0] ? hist[0].d : today()).slice(7))) + " anche il confronto con un anno prima.</p>";
+    else {
+      var yc = histChange("t", D.total);
+      h += '<div id="wHistChart"></div><p class="small">' + (yc && yc.label === "in un anno" ? "Rispetto a un anno fa: " + pctTxt(yc.pct * 100) + "." :
+        "Il confronto con un anno prima arriva il " + esc(longDate(MM.addMonths(hist[0].d.slice(0, 7), 12) + hist[0].d.slice(7))) + ".") + " Un punto al giorno, quando apri l'app.</p>";
+    }
+    h += "</div>";
+
+    // bank accounts, each with how it was calculated and what it earns
+    h += '<div id="wConti" class="block-anchor"></div>';
     // bank accounts, each with how it was calculated; then the currencies parked on an exchange
     var exRows = D.ex.map(function (b) {
       var bad = b.accounts.filter(function (a) { return a.status !== "ok"; }), last = b.accounts.map(function (a) { return a.when; }).filter(Boolean).sort().slice(-1)[0];
-      var row = '<span class="pf-l"><b>' + esc(b.placeName) + "</b><small>" + (bad.length ? pfFlag("non letto: valori di " + when(last), true) : esc(b.sym) + " · letto " + esc(when(last))) + "</small></span>" +
+      var row = '<span class="pf-l"><b>' + esc(b.placeName) + "</b><small>" + (bad.length ? pfFlag("non letto: valori di " + when(last), true) : yieldTag(b.key) + " · " + esc(b.sym) + " letti " + esc(when(last))) + "</small></span>" +
         '<span class="pf-r"><b>' + (b.eur !== null ? wm2(b.eur) : "—") + "</b><small>" + (D.total > 0 && b.eur > 0 ? share(b.eur / D.total) : "") + "</small></span>" + CHEV;
       var det = '<div class="w-calc">' + b.accounts.map(function (a) { return "<div><span>" + esc(b.sym) + " su " + esc(b.placeName) + " › " + esc(a.name) + "</span><b>" + qty(a.qty) + " " + esc(b.sym) + "</b></div>"; }).join("") +
         '<div class="tot"><span>Saldo di oggi</span><b>' + (b.eur !== null ? wm2(b.eur) : "—") + "</b></div></div>" +
         '<p class="pf-det-n">Letto dal programma sul PC. Lo conto come conto in banca e non come crypto: lo cambi in <button type="button" class="linkbtn" data-w="setup-fiat">Impostazioni › Patrimonio</button>.</p>';
       return pfItem("w:x:" + b.key, row, det);
     }).join("");
-    h += '<div class="block"><h2 class="h">Conti</h2>';
+    h += '<div class="block"><div class="block-head"><h2 class="h">Conti</h2><button type="button" class="btn small" data-w="setup-yield">Rendimenti</button></div>';
+    if (D.accs.length) h += '<p class="lead">' + (D.yieldTot > 0.005 ? "Rendono <b>" + wm2(D.yieldTot) + "</b>, circa " + wm2(D.interest) + " nei prossimi 12 mesi. " : "") + "Fermi <b>" + wm2(D.idleTot) + "</b>.</p>";
     if (!bk.set) h += (exRows ? '<div class="card pf-list" style="margin-bottom:10px">' + exRows + "</div>" : "") + '<div class="card group"><p>Scrivi una volta i saldi di Poste e Fineco di una sera: da lì il sito aggiunge gli stipendi, toglie le spese, sposta il giroconto del mese e toglie le ricariche di ether.fi.</p><div class="btnrow"><button type="button" class="btn small primary" data-w="setup">Scrivi i saldi</button></div></div>';
     else {
       var since = "dal " + shortDate(bk.from);
@@ -986,24 +1150,30 @@
         "<div><span>Acquisti di ETF</span><b>" + wm2(-F.etf) + "</b></div>" +
         (F.income ? "<div><span>Entrate</span><b>+" + wm2(F.income) + "</b></div>" : "") + (F.spent ? "<div><span>Spese da Fineco</span><b>" + wm2(-F.spent) + "</b></div>" : "") +
         '<div class="tot"><span>Saldo di oggi</span><b>' + wm2(F.value) + "</b></div></div>";
-      var accRow = function (name, B) {
-        return '<span class="pf-l"><b>' + name + "</b><small>Calcolato " + since + '</small></span><span class="pf-r"><b class="' + (B.value < 0 ? "neg" : "") + '">' + wm2(B.value) + "</b><small>" +
+      var accRow = function (name, B, key) {
+        return '<span class="pf-l"><b>' + name + "</b><small>" + yieldTag(key) + " · calcolato " + since + '</small></span><span class="pf-r"><b class="' + (B.value < 0 ? "neg" : "") + '">' + wm2(B.value) + "</b><small>" +
           (D.total > 0 ? share(Math.max(0, B.value) / D.total) : "") + "</small></span>" + CHEV;
       };
-      h += '<div class="card pf-list">' + pfItem("w:poste", accRow("Poste", P), pRows) + pfItem("w:fineco", accRow("Fineco", F), fRows) + exRows + "</div>";
+      h += '<div class="card pf-list">' + pfItem("w:poste", accRow("Poste", P, "poste"), pRows) + pfItem("w:fineco", accRow("Fineco", F, "fineco"), fRows) + exRows + "</div>";
     }
     h += "</div>";
 
+
     // ETFs: shares typed once a month, price from the PC
-    h += '<div class="block"><h2 class="h">ETF</h2>';
+    h += '<div id="wEtf" class="block-anchor"></div><div class="block"><div class="block-head"><h2 class="h">ETF</h2>' + (D.et.length ? '<button type="button" class="btn small' + (W.editEtf ? " primary" : "") + '" data-w="etf-edit">' + (W.editEtf ? "Fatto" : "Aggiorna quote") + "</button>" : "") + "</div>";
     if (!D.et.length) h += '<div class="card group"><p>Aggiungi gli ISIN dei tuoi ETF nel programma sul PC (config.json, voce "etf"): da lì arriva il prezzo. Le quote poi le scrivi qui.</p></div>';
-    else {
+    else if (!W.editEtf) {
+      h += '<div class="card pf-list">' + D.et.map(function (e) {
+        var p = e.price !== null ? (e.cur === "EUR" ? eur2F.format(e.price) : e.price.toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " " + e.cur) : null;
+        return '<div class="w-ro' + (e.qty ? "" : " off") + '"><span>' + esc(e.name) + "<small>" + (e.qty ? qty(e.qty) + (e.qty === 1 ? " quota" : " quote") + (p ? " × " + p : "") : "Nessuna quota" + (p ? " · " + p : "")) + (p ? "" : e.error ? " · prezzo non trovato" : " · prezzo in arrivo") +
+          (e.qtyAt ? " · quote del " + esc(shortDate(e.qtyAt)) : "") + "</small></span><b>" + (e.priceEur !== null ? wm2(e.value) : "—") + "</b></div>";
+      }).join("") + "</div>";
+    } else {
       h += '<p class="lead">Scrivi quante quote hai: aggiornale una volta al mese. Il prezzo arriva dal programma sul PC.</p><div class="card">' + D.et.map(function (e) {
-        var p = e.price !== null ? (e.cur === "EUR" ? eur2F.format(e.price) : e.price.toLocaleString("it-IT", { maximumFractionDigits: 2 }) + " " + e.cur) : null;
+        var p = e.price !== null ? (e.cur === "EUR" ? eur2F.format(e.price) : e.price.toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " " + e.cur) : null;
         return '<div class="w-etf"><span class="nm">' + esc(e.name) + "<small>" + esc(e.isin) + (e.symbol ? " · " + esc(e.symbol) : "") + "</small></span>" +
           '<label for="etf-' + esc(e.isin) + '">Quote<input type="text" inputmode="decimal" id="etf-' + esc(e.isin) + '" data-etf="' + esc(e.isin) + '" value="' + (e.qty ? esc(String(e.qty).replace(".", ",")) : "") + '" placeholder="0" autocomplete="off"></label>' +
-          '<span class="v"><span>' + (p ? qty(e.qty) + " × " + p + (e.priceAt ? " · " + esc(when(e.priceAt)) : "") : (e.error ? "Prezzo non trovato: " + esc(e.error) : "Prezzo non ancora arrivato")) + "</span><b>" + (e.priceEur !== null ? wm(e.value) : "—") + "</b></span>" +
-          (e.qtyAt ? '<small style="grid-column:1/-1;font-size:12px;color:var(--muted)">Quote aggiornate il ' + esc(shortDate(e.qtyAt)) + "</small>" : "") + "</div>";
+          '<span class="v"><span>' + (p ? qty(e.qty) + " × " + p + (e.priceAt ? " · " + esc(when(e.priceAt)) : "") : (e.error ? "Prezzo non trovato: " + esc(e.error) : "Prezzo non ancora arrivato")) + "</span><b>" + (e.priceEur !== null ? wm2(e.value) : "—") + "</b></span></div>";
       }).join("") + "</div>";
     }
     h += "</div>";
@@ -1011,14 +1181,28 @@
     // what to know
     var notes = [];
     if (bk.set && (P.value < 0 || F.value < 0)) notes.push([ICON_WARN, "Un saldo calcolato è sotto zero: probabilmente manca un movimento. Aggiorna i saldi di partenza in Impostazioni."]);
+    D.accs.forEach(function (a) { if (a.rate > 0 && a.expired) notes.push([ICON_WARN, "Il tasso del " + esc(String(a.rate).replace(".", ",")) + "% su " + esc(a.name) + " è finito il " + esc(longDate(a.until)) + ": ora lo conto tra i conti fermi. Aggiornalo in Impostazioni."]); });
     if (D.R && !D.rate) notes.push([ICON_WARN, "Il cambio euro/dollaro non è disponibile: le crypto non sono nel totale finché non arrivano i prezzi."]);
     if (D.ex.some(function (b) { return b.eur === null; })) notes.push([ICON_WARN, "Una valuta contata come conto non ha ancora il cambio in euro: è fuori dal totale."]);
     if (!state.pf.doc) notes.push([ICON_INFO, "Le crypto arrivano dal programma sul PC (patrimonio.json): finché non c'è, conto solo quelle inserite a mano."]);
     if (D.et.some(function (e) { return e.qty && e.priceEur === null; })) notes.push([ICON_INFO, "Un ETF non ha ancora un prezzo in euro: è fuori dal totale."]);
     if (noRate) notes.push([ICON_INFO, "Mostro gli euro finché non arriva il cambio con il dollaro."]);
-    notes.push([ICON_INFO, "Conti e ETF sono in euro; le crypto sono convertite con il cambio di USDT. I contanti non sono contati."]);
+    notes.push([ICON_INFO, "Liquidità: conti, stablecoin e valute sugli exchange. Investito: ETF e crypto. Le crypto sono convertite con il cambio di USDT; i contanti non sono contati."]);
     h += '<div class="notes">' + notes.map(function (n) { return '<p class="note-i">' + n[0] + "<span>" + n[1] + "</span></p>"; }).join("") + "</div>";
     box.innerHTML = h;
+
+    if (hist.length >= 2) {
+      var pts = hist.map(function (p) { return { t: new Date(p.d + "T12:00:00").getTime(), v: wConv(+p.t), p: p }; });
+      Charts.line($("wHistChart"), {
+        points: pts, color: "var(--ink)", height: 160, fmtAxis: function (v) { return n0(v); },
+        ariaLabel: "Patrimonio nel tempo", desc: hist.map(function (p) { return longDate(p.d) + ": " + wm2(+p.t); }).join("; "),
+        tip: function (i) {
+          var p = pts[i].p;
+          return { title: cap(longDate(p.d)), rows: [{ value: wm2(+p.t), label: "in tutto", color: "var(--ink)" }]
+            .concat(isFinite(+p.l) ? [{ value: wm2(+p.l), label: "liquidità" }, { value: wm2(+p.i), label: "investito" }] : []) };
+        }
+      });
+    }
   }
 
   /* Currencies on the exchanges: tick one to count it as a bank account instead of crypto */
@@ -1033,9 +1217,31 @@
     }).join("") : '<p class="small">' + (state.pf.doc ? "Nessun euro o dollaro sugli exchange." : "Compaiono quando arriva il file del programma sul PC.") + "</p>";
   }
 
+  /* The yearly rate of each account: Poste, Fineco and the currencies counted as a bank account */
+  function renderYieldSettings() {
+    var box = $("wYield"); if (!box) return;
+    var list = [{ key: "poste", name: "Poste" }, { key: "fineco", name: "Fineco" }], on = wSet().asBank || {}, names = {};
+    PF.fiatSpots(pfDoc()).forEach(function (x) { names[x.key] = x.placeName + " · " + x.sym; });
+    Object.keys(on).filter(function (k) { return on[k]; }).sort().forEach(function (k) { var i = k.lastIndexOf("|"); list.push({ key: k, name: names[k] || k.slice(0, i) + " · " + k.slice(i + 1), sub: "valuta su un exchange" }); });
+    box.innerHTML = list.map(function (a, i) {
+      var y = yieldOf(a.key);
+      return '<div class="w-yield-r"><span class="nm">' + esc(a.name) + (a.sub ? " <small>" + esc(a.sub) + "</small>" : "") + "</span>" +
+        '<label for="wy' + i + '">% annuo<input type="number" id="wy' + i + '" min="0" max="100" step="0.01" inputmode="decimal" data-yk="' + esc(a.key) + '" data-yf="rate" value="' + (y.rate ? esc(y.rate) : "") + '" placeholder="fermo"></label>' +
+        '<label for="wu' + i + '">Fino al<input type="date" id="wu' + i + '" data-yk="' + esc(a.key) + '" data-yf="until" value="' + esc(y.until) + '"></label></div>';
+    }).join("") + '<p class="small">Gli altri soldi sugli exchange li conto con le crypto: per aggiungerli qui spuntali in "Valute sugli exchange".</p>';
+  }
+  /* Settings sections: open the one asked for, then scroll to it */
+  var SECT_KEY = "mm-set-open";
+  function openSettingsAt(id) {
+    showView("impostazioni");
+    var d = $(id); if (!d) return;
+    d.open = true;
+    setTimeout(function () { d.scrollIntoView({ block: "start" }); }, 30);
+  }
+
   /* Patrimonio settings, in Impostazioni */
   function renderWealthSettings() {
-    renderFiatSettings();
+    renderFiatSettings(); renderYieldSettings();
     var w = wSet(), g = w.giro || {};
     $("wDate").value = w.date || ""; $("wPoste").value = w.date ? (+w.poste || 0) : ""; $("wFineco").value = w.date ? (+w.fineco || 0) : "";
     $("wGiro").value = g.amount !== undefined ? g.amount : ""; $("wGiroDay").value = g.day || 15; $("wFee").value = w.fee !== undefined ? w.fee : "";
@@ -1109,7 +1315,10 @@
       b.setAttribute("aria-expanded", String(open)); if (det) det.hidden = !open;
       if (open) OPEN[b.dataset.open] = true; else delete OPEN[b.dataset.open];
     } else if (b.dataset.pf === "reload") { state.pf.err = null; syncPortfolio(); pfRender(); }
+    else if (b.dataset.pf === "edit") { state.pf.editManual = true; renderCrypto(); }
+    else if (b.dataset.pf === "done") { state.pf.editManual = false; renderCrypto(); }
     else if (b.dataset.pf === "add") {
+      state.pf.editManual = true;
       var last = (settings.pfManual || []).slice(-1)[0];
       settings.pfManual = (settings.pfManual || []).concat([{ posto: last ? last.posto : "Kast", simbolo: "USD", quantita: "", aggiornato: new Date().toISOString() }]);
       saveSettings(); renderCrypto();
@@ -1139,8 +1348,10 @@
     if (k === "back") { W.level = null; renderWealth(); }
     else if (k === "conti" || k === "etf" || k === "crypto") { W.level = k; renderWealth(); }
     else if (k === "open-crypto") { showView("crypto"); window.scrollTo(0, 0); }
-    else if (k === "setup") { showView("impostazioni"); var el = $("wSettings"); if (el) el.scrollIntoView({ block: "start" }); }
-    else if (k === "setup-fiat") { showView("impostazioni"); var f = $("wFiatHead"); if (f) f.scrollIntoView({ block: "start" }); }
+    else if (k === "etf-edit") { W.editEtf = !W.editEtf; renderWealth(); if (W.editEtf) { var first = document.querySelector("#wBody input[data-etf]"); if (first) first.focus(); } }
+    else if (k === "setup") openSettingsAt("set-wealth");
+    else if (k === "setup-fiat") openSettingsAt("set-fiat");
+    else if (k === "setup-yield") openSettingsAt("set-yield");
   });
   $("wBody").addEventListener("change", function (e) {
     var t = e.target, w = wSet();
@@ -1171,8 +1382,24 @@
     var k = e.target.dataset && e.target.dataset.bank; if (!k) return;
     var on = Object.assign({}, wSet().asBank || {});
     if (e.target.checked) on[k] = true; else delete on[k];
-    saveWealth({ asBank: on }); renderFiatSettings();
+    saveWealth({ asBank: on }); renderFiatSettings(); renderYieldSettings();
   });
+  $("wYield").addEventListener("change", function (e) {
+    var k = e.target.dataset && e.target.dataset.yk, f = e.target.dataset && e.target.dataset.yf; if (!k || !f) return;
+    var all = Object.assign({}, wSet().yield || {}), y = Object.assign({}, all[k] || {});
+    if (f === "rate") { var n = parseQty(e.target.value); y.rate = n && n > 0 ? Math.min(100, n) : 0; }
+    else y.until = /^\d{4}-\d{2}-\d{2}$/.test(e.target.value) ? e.target.value : "";
+    if (!y.rate && !y.until) delete all[k]; else all[k] = y;
+    saveWealth({ yield: all });
+  });
+  /* Settings sections remember whether they were open, on this device */
+  (function () {
+    var open = {}; try { open = JSON.parse(load(SECT_KEY) || "{}") || {}; } catch (e) {}
+    document.querySelectorAll("details.sect").forEach(function (d) {
+      if (open[d.id]) d.open = true;
+      d.addEventListener("toggle", function () { open[d.id] = d.open; if (!d.open) delete open[d.id]; store(SECT_KEY, JSON.stringify(open)); });
+    });
+  })();
   $("wAccounts").addEventListener("change", function (e) {
     var n = e.target.dataset && e.target.dataset.acc; if (!n) return;
     var acc = Object.assign({}, wSet().accounts || {}); acc[n] = e.target.value; saveWealth({ accounts: acc });
