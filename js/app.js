@@ -301,17 +301,15 @@
       var q = quotaInfo(r, c), left = q.quota - cc.spent;
       var ratio = q.quota > 0 ? Math.min(cc.spent / q.quota, 1) : 0;
       // the big number: what is left of this month's quota (an estimate until the salary arrives)
-      var big, lbl;
-      if (q.quota > 0) {
-        big = (q.expected ? '<span class="env-circa">circa</span>' : "") + eur0.format(left);
-        lbl = left < 0 ? "Oltre la quota di " + mName : (c === "inv" ? "Da investire a " : "Restano a ") + mName;
-      } else { big = eur0.format(-cc.spent); lbl = r.kind === "missing" ? "Speso a " + mName + ", senza stipendio registrato" : "Speso a " + mName + ": la quota arriva con lo stipendio"; }
+      // the big number: the total with the months before; this month's share is the first row underneath
+      var big = eur0.format(cc.avail), lbl = c === "inv" ? "Da investire in tutto" : "In tutto, con i mesi prima";
+      var monthRow = q.quota > 0 ? '<span class="env-row"><span>' + (left < 0 ? "Oltre la quota di " : c === "inv" ? "Da investire a " : "Restano a ") + mName + "</span><b>" + (q.expected ? "circa " : "") + eur0.format(left) + "</b></span>" : "";
       var spentTxt = (c === "inv" ? "Investito" : "Speso") + " <b>" + eur0.format(cc.spent) + "</b>" + (q.quota > 0 ? " di " + (q.expected ? "circa " : "") + eur0.format(q.quota) : "");
       if (cc.hist) spentTxt += " · altra app";
       var trips = c === "div" ? tripsOf(cc.items) : 0;
       if (trips > 0.5) spentTxt += " · viaggi " + eur0.format(trips);
       // under the line: the balance with the months before, what is already booked, the liquidity
-      var rows = '<span class="env-row"><span>' + (c === "inv" ? "Da investire in tutto" : "Saldo con i mesi prima") + "</span><b>" + eur0.format(cc.avail) + "</b></span>";
+      var rows = monthRow;
       var bk = isCur ? booked(c) : null;
       if (bk) rows += '<span class="env-row"><span>Prenotato per ' + bk.when + "</span><b>" + eur0.format(bk.total) + "</b></span>";
       if (c === "inv") rows += '<span class="env-row"><span>Liquidità per discese, sul conto</span><b>' + eur0.format(r.liq.avail) + "</b></span>";
@@ -321,7 +319,7 @@
         '<span class="env-state">' + lbl + "</span>" +
         '<span class="meter' + (q.expected ? " waiting" : "") + '" aria-hidden="true">' + (ratio ? '<i style="width:' + (ratio * 100).toFixed(1) + '%"></i>' : "") + "</span>" +
         '<span class="env-foot"><span>' + spentTxt + "</span></span>" +
-        '<span class="env-rows">' + rows + "</span>" +
+        (rows ? '<span class="env-rows">' + rows + "</span>" : "") +
         "</button>";
       if (c === "inv") total += r.liq.avail;
     });
@@ -381,18 +379,18 @@
     $("sheetEyebrow").textContent = cap(MM.monthLong(m)) + " · " + (+r.rule[c] || 0) + "% delle entrate";
     sheetTitle(NAMES[c], cvar(c));
     var body = "";
+    body += '<div class="card calc">' +
+      "<div><span>" + (idx > 0 ? "Riporto da " + MM.monthLong(state.led.months[idx - 1]).split(" ")[0] : "Riporto") + '</span><b class="' + (carry < 0 ? "neg" : "") + '">' + signed(carry) + "</b>" + (idx > 0 ? "<small>Quello che restava a fine mese, avanzi e debiti compresi.</small>" : "") + "</div>" +
+      "<div><span>Quota di " + monthName(m) + "</span><b>" + signed(cc.quota) + "</b>" +
+        (q.expected ? "<small>Lo stipendio non è ancora arrivato: la quota sarà di circa " + eur0.format(q.quota) + ".</small>" : cc.quota ? "" : "<small>Nessuno stipendio per questo mese.</small>") + "</div>" +
+      "<div><span>Speso a " + monthName(m) + "</span><b>" + signed(-cc.spent) + "</b>" + (cc.hist ? "<small>Totale registrato nell'altra app.</small>" : "") + "</div>" +
+      '<div class="tot"><span>' + (c === "inv" ? "Da investire in tutto" : "In tutto, con i mesi prima") + '</span><b class="' + (cc.avail < 0 ? "neg" : "") + '">' + eur0.format(cc.avail) + "</b></div></div>";
     if (q.quota > 0) {
       var left = q.quota - cc.spent;
       body += '<div class="card calc"><div><span>Quota di ' + monthName(m) + (q.expected ? " (stima)" : "") + "</span><b>" + eur0.format(q.quota) + "</b></div>" +
         "<div><span>Speso a " + monthName(m) + "</span><b>" + signed(-cc.spent) + "</b>" + (c === "div" && tripsOf(cc.items) > 0.5 ? "<small>Di cui viaggi " + eur0.format(tripsOf(cc.items)) + ".</small>" : "") + "</div>" +
         '<div class="tot"><span>' + (left < 0 ? "Oltre la quota" : c === "inv" ? "Da investire a " + monthName(m) : "Restano a " + monthName(m)) + '</span><b class="' + (left < 0 ? "neg" : "") + '">' + eur0.format(left) + "</b></div></div>";
     }
-    body += '<div class="card calc">' +
-      "<div><span>" + (idx > 0 ? "Riporto da " + MM.monthLong(state.led.months[idx - 1]).split(" ")[0] : "Riporto") + '</span><b class="' + (carry < 0 ? "neg" : "") + '">' + signed(carry) + "</b>" + (idx > 0 ? "<small>Quello che restava a fine mese, avanzi e debiti compresi.</small>" : "") + "</div>" +
-      "<div><span>Quota di " + monthName(m) + "</span><b>" + signed(cc.quota) + "</b>" +
-        (q.expected ? "<small>Lo stipendio non è ancora arrivato: la quota sarà di circa " + eur0.format(q.quota) + ".</small>" : cc.quota ? "" : "<small>Nessuno stipendio per questo mese.</small>") + "</div>" +
-      "<div><span>Speso a " + monthName(m) + "</span><b>" + signed(-cc.spent) + "</b>" + (cc.hist ? "<small>Totale registrato nell'altra app.</small>" : "") + "</div>" +
-      '<div class="tot"><span>' + (c === "inv" ? "Da investire in tutto" : "Saldo con i mesi prima") + '</span><b class="' + (cc.avail < 0 ? "neg" : "") + '">' + eur0.format(cc.avail) + "</b></div></div>";
     var bk = m === state.led.cur ? booked(c) : null;
     if (bk) {
       body += '<div class="card" style="display:grid;gap:2px;padding-block:12px 6px"><h3 class="h">Prenotato per ' + bk.when + "</h3>" +
@@ -492,7 +490,7 @@
 
   /* ---------- Period shared by Andamento and Medie ---------- */
   function periodData() {
-    var a = MM.analysis(state.data, { today: today(), period: state.period, countInvest: $("inv").checked, protected: settings.protected, targets: settings.targets });
+    var a = MM.analysis(state.data, { today: today(), period: state.period, countInvest: true, protected: settings.protected, targets: settings.targets });
     var cur = state.led.cur, M = MM.monthly(state.led, a.months, cur);
     var closed = a.closed, text;
     if (state.period === "last12") text = "ultimi 12 mesi"; else if (state.period === "all") text = "tutto lo storico"; else text = "anno " + state.period;
@@ -587,14 +585,16 @@
   function renderAnalysis() {
     var A = periodData(), a = A.a, M = A.M;
     state.an = a;
+    // investments always counted, with the same numbers as Andamento (the other app's totals included)
+    var groups = invFromLedger(a, M), avgAll = avgWithInvest(a, M);
     if (a.avgMonth === null) $("avgHero").innerHTML = "La media si calcola quando il primo mese è chiuso.";
-    else $("avgHero").innerHTML = "In media spendi<b>" + eur0.format(a.avgMonth) + "</b>al mese, su " + (a.closed.length === 1 ? "1 mese chiuso" : a.closed.length + " mesi chiusi") + " (" + A.closedText + ")" + ($("inv").checked ? ", investimenti compresi." : ".");
+    else $("avgHero").innerHTML = "In media spendi<b>" + eur0.format(avgAll) + "</b>al mese, investimenti compresi, su " + (a.closed.length === 1 ? "1 mese chiuso" : a.closed.length + " mesi chiusi") + " (" + A.closedText + ").";
     // the conclusion: spending (Essenziali + Divertimento) against its share of the salary, and the investments
     var B = budgetFacts(M);
     if (a.avgMonth !== null && B.spendQuota) $("avgHero").innerHTML += '<span class="avg-say">' + (B.gap > 0.5 ? "Sono <b>" + eur0.format(B.gap) + " in più</b> della quota per le spese (" + eur0.format(B.spendQuota) + ")." :
       B.gap < -0.5 ? "Restano <b>" + eur0.format(-B.gap) + "</b> della quota per le spese (" + eur0.format(B.spendQuota) + ")." : "Sei in linea con la quota per le spese (" + eur0.format(B.spendQuota) + ").") + "</span>";
     // containers: average spent against the average quota
-    var rows = a.macroList.map(function (m) { var c = m.container; return { m: m, c: c, q: c && M.cont[c] ? M.cont[c].quotaAvg : 0 }; });
+    var rows = groups.map(function (m) { var c = m.container; return { m: m, c: c, q: c && M.cont[c] ? M.cont[c].quotaAvg : 0 }; });
     var max = Math.max.apply(null, rows.map(function (x) { return Math.max(x.m.avg, x.q); }).concat([1]));
     $("kpis").innerHTML = rows.length ? rows.map(function (x) {
       var w = function (v) { return (v / max * 100).toFixed(1) + "%"; };
@@ -610,9 +610,9 @@
     $("editPlan").textContent = edit ? "Fatto" : "Scrivi gli obiettivi";
     $("planLead").textContent = edit ? "Scrivi quanto vuoi spendere al mese per ogni categoria e segna con la stella le spese da proteggere. Si salva da solo." :
       "Media al mese di ogni categoria, sui mesi chiusi. La tacca nera è il tuo obiettivo. Tocca una categoria per vederla mese per mese.";
-    var maxS = Math.max.apply(null, a.subList.map(function (s) { return Math.max(s.avg, s.target || 0); }).concat([1]));
+    var maxS = Math.max.apply(null, [].concat.apply([], groups.map(function (g) { return g.items; })).map(function (s) { return Math.max(s.avg, s.target || 0); }).concat([1]));
     var h = "";
-    a.macroList.forEach(function (m) {
+    groups.forEach(function (m) {
       h += '<div class="cat-group"><span class="nm"><i class="cdot" style="--c:' + cvar(m.container) + '"></i>' + esc(m.macro) + '</span><span class="v">' + eur0.format(m.avg) + " al mese</span></div>";
       m.items.forEach(function (s) {
         var gap = s.target !== null ? s.avg - s.target : null, sid = s.key.replace(/[^\p{L}\p{N}]+/gu, "_"), t = tg[s.key];
@@ -637,11 +637,28 @@
       "In media spendi <b>" + eur0.format(Math.abs(B.gap)) + " al mese meno della quota</b> (" + eur0.format(B.spend) + " contro " + eur0.format(B.spendQuota) + ").");
     if (a.closed.length && B.invQuota) say.push("Investi in media <b>" + eur0.format(B.inv) + "</b> su " + eur0.format(B.invQuota) + (B.waiting > 0.5 ? ": <b>" + eur0.format(B.waiting) + "</b> aspettano di essere investiti." : "."));
     $("planSum").innerHTML = (say.length ? '<p class="plan-say">' + say.join(" ") + "</p>" : "") +
-      '<div class="hl"><span>Spesa media al mese</span><b>' + (a.avgMonth === null ? "—" : eur0.format(a.avgMonth)) + "</b></div>" +
+      '<div class="hl"><span>Spesa media al mese, investimenti compresi</span><b>' + (avgAll === null ? "—" : eur0.format(avgAll)) + "</b></div>" +
+      (B.spend ? "<div><span>Di cui Essenziali e Divertimento</span><b>" + eur0.format(B.spend) + "</b></div>" : "") +
       (a.anyTarget ? "<div><span>Con i tuoi obiettivi</span><b>" + eur0.format(a.planned) + "</b></div>" : "") +
       (inc ? "<div><span>Entrate medie al mese</span><b>" + eur0.format(inc) + "</b></div><div><span>Quota per le spese (" + spendPct + "%)</span><b>" + eur0.format(inc * spendPct / 100) + "</b></div>" : "") +
       (B.invQuota ? "<div><span>Investito in media al mese</span><b>" + eur0.format(B.inv) + " di " + eur0.format(B.invQuota) + "</b></div>" : "") +
       '<div><span>Spese da proteggere <span class="star">★</span></span><b>' + eur0.format(a.protAvg) + "</b></div>";
+  }
+  /* The Investimenti group read from the ledger, so months with the other app's totals count too */
+  function invFromLedger(a, M) {
+    var tg = settings.targets || {}, prot = settings.protected || {};
+    var items = M.subs.filter(function (x) { return x.container === "inv"; }).map(function (x) {
+      var t = tg[x.key];
+      return { key: x.key, sub: x.key === "hist" ? "Altra app" : x.sub, avg: x.avg, protected: !!prot[x.key], target: t !== undefined && t !== "" && isFinite(+t) ? +t : null };
+    }).sort(function (p, q) { return q.avg - p.avg; });
+    var out = a.macroList.filter(function (m) { return m.container !== "inv"; });
+    if (items.length) out.push({ macro: NAMES.inv, container: "inv", avg: M.cont.inv.avg, items: items });
+    return out;
+  }
+  function avgWithInvest(a, M) {
+    if (a.avgMonth === null) return null;
+    var mm = a.macroList.filter(function (m) { return m.container === "inv"; }).reduce(function (t, m) { return t + m.avg; }, 0);
+    return a.avgMonth - mm + M.cont.inv.avg;
   }
   /* Averages over the period's closed months, from the same numbers as the charts */
   function budgetFacts(M) {
@@ -703,7 +720,13 @@
   /* The PC file plus what is typed on this site (for apps that cannot be read, like Kast) */
   function pfDoc() { return PF.withManual(state.pf.doc, settings.pfManual); }
   /* The same without the currencies counted as a bank account (Impostazioni › Patrimonio), and those apart */
-  function pfSplit() { return PF.splitBank(pfDoc(), (settings.wealth || {}).asBank); }
+  function pfSplit() { var d = pfDoc(); return PF.splitBank(d, (settings.wealth || {}).asBank, cardPlaces(d)); }
+  /* Payment cards (ether.fi Cash and the like): their balance is money to spend, so it counts as an account, not as crypto */
+  function cardPlaces(doc) {
+    var set = (settings.wealth || {}).cards || {}, out = {};
+    ((doc && doc.posti) || []).forEach(function (p) { if (set[p.id] !== undefined ? !!set[p.id] : p.tipo === "app") out[p.id] = true; });
+    return out;
+  }
   function parseQty(v) {
     var t = String(v || "").replace(/\s|'/g, "");
     if (t.indexOf(",") >= 0) t = t.replace(/\./g, "").replace(",", ".");
@@ -1215,20 +1238,25 @@
       return '<label class="switch w-fiat" for="wf' + i + '"><span>' + esc(x.placeName) + " · " + esc(x.sym) + "<small>" + (x.gone ? "Non c'è più nel file del PC" : qty(x.qty) + " " + esc(x.sym) + " · " + esc(x.accounts.join(", "))) + "</small></span>" +
         '<input type="checkbox" id="wf' + i + '" data-bank="' + esc(x.key) + '"' + (on[x.key] ? " checked" : "") + "></label>";
     }).join("") : '<p class="small">' + (state.pf.doc ? "Nessun euro o dollaro sugli exchange." : "Compaiono quando arriva il file del programma sul PC.") + "</p>";
+    // cards and payment apps: the whole balance counts as an account
+    var doc = pfDoc(), cards = cardPlaces(doc), places = ((doc && doc.posti) || []).filter(function (p) { return p.tipo === "app" || p.tipo === "manuale"; });
+    if (places.length) box.innerHTML += '<p class="rule-sub" style="margin-top:6px">Carte e app di pagamento: tutto il saldo conta come conto</p>' + places.map(function (p, i) {
+      return '<label class="switch w-fiat" for="wc' + i + '"><span>' + esc(p.nome || p.id) + "<small>" + (p.tipo === "app" ? "App di pagamento" : "Inserito a mano") + "</small></span>" +
+        '<input type="checkbox" id="wc' + i + '" data-card="' + esc(p.id) + '"' + (cards[p.id] ? " checked" : "") + "></label>";
+    }).join("");
   }
 
   /* The yearly rate of each account: Poste, Fineco and the currencies counted as a bank account */
   function renderYieldSettings() {
     var box = $("wYield"); if (!box) return;
-    var list = [{ key: "poste", name: "Poste" }, { key: "fineco", name: "Fineco" }], on = wSet().asBank || {}, names = {};
-    PF.fiatSpots(pfDoc()).forEach(function (x) { names[x.key] = x.placeName + " · " + x.sym; });
-    Object.keys(on).filter(function (k) { return on[k]; }).sort().forEach(function (k) { var i = k.lastIndexOf("|"); list.push({ key: k, name: names[k] || k.slice(0, i) + " · " + k.slice(i + 1), sub: "valuta su un exchange" }); });
+    var list = [{ key: "poste", name: "Poste" }, { key: "fineco", name: "Fineco" }];
+    pfSplit().bank.slice().sort(function (a, b) { return a.key < b.key ? -1 : 1; }).forEach(function (b) { list.push({ key: b.key, name: b.placeName + " · " + b.sym, sub: b.card ? "carta" : "valuta su un exchange" }); });
     box.innerHTML = list.map(function (a, i) {
       var y = yieldOf(a.key);
       return '<div class="w-yield-r"><span class="nm">' + esc(a.name) + (a.sub ? " <small>" + esc(a.sub) + "</small>" : "") + "</span>" +
         '<label for="wy' + i + '">% annuo<input type="number" id="wy' + i + '" min="0" max="100" step="0.01" inputmode="decimal" data-yk="' + esc(a.key) + '" data-yf="rate" value="' + (y.rate ? esc(y.rate) : "") + '" placeholder="fermo"></label>' +
         '<label for="wu' + i + '">Fino al<input type="date" id="wu' + i + '" data-yk="' + esc(a.key) + '" data-yf="until" value="' + esc(y.until) + '"></label></div>';
-    }).join("") + '<p class="small">Gli altri soldi sugli exchange li conto con le crypto: per aggiungerli qui spuntali in "Valute sugli exchange".</p>';
+    }).join("") + '<p class="small">Gli altri soldi sugli exchange li conto con le crypto: per aggiungerli qui spuntali in "Valute sugli exchange e carte".</p>';
   }
   /* Settings sections: open the one asked for, then scroll to it */
   var SECT_KEY = "mm-set-open";
@@ -1379,6 +1407,8 @@
     });
   });
   $("wFiat").addEventListener("change", function (e) {
+    var cd = e.target.dataset && e.target.dataset.card;
+    if (cd) { var cs = Object.assign({}, wSet().cards || {}); cs[cd] = e.target.checked; saveWealth({ cards: cs }); renderFiatSettings(); renderYieldSettings(); return; }
     var k = e.target.dataset && e.target.dataset.bank; if (!k) return;
     var on = Object.assign({}, wSet().asBank || {});
     if (e.target.checked) on[k] = true; else delete on[k];
@@ -1429,7 +1459,6 @@
   document.addEventListener("keydown", function (e) { if (e.key !== "Escape") return; if (state.sheet) closeSheet(); else closeDrawer(true); });
   $("period").addEventListener("change", function () { setPeriod(this.value); renderAnalysis(); });
   $("trendPeriod").addEventListener("change", function () { setPeriod(this.value); renderTrends(); });
-  $("inv").addEventListener("change", function () { renderAnalysis(); });
   $("editPlan").addEventListener("click", function () { state.editPlan = !state.editPlan; renderAnalysis(); });
   $("movMonth").addEventListener("change", function () { state.movUserSet = true; renderMoves(); });
   $("movPrev").addEventListener("click", function () { stepMov(-1); });

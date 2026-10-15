@@ -153,15 +153,17 @@ var PF = (function () {
     return Object.keys(out).map(function (k) { return out[k]; }).sort(function (a, b) { return a.placeName.localeCompare(b.placeName) || a.sym.localeCompare(b.sym); });
   }
   /* The file without the balances counted as a bank account, and those balances apart */
-  function splitBank(doc, asBank) {
-    var on = asBank || {};
-    if (!doc || !Object.keys(on).some(function (k) { return on[k]; })) return { doc: doc, bank: [] };
+  /* cards = {placeId: true}: everything on that place (a payment card) counts as a bank account, whatever the coin */
+  function splitBank(doc, asBank, cards) {
+    var on = asBank || {}, cp = cards || {};
+    var any = function (o) { return Object.keys(o).some(function (k) { return o[k]; }); };
+    if (!doc || (!any(on) && !any(cp))) return { doc: doc, bank: [] };
     var bank = {}, rest = [], names = placeNames(doc), posti = {};
     doc.posti.forEach(function (p) { posti[p.id] = p; });
     doc.saldi.forEach(function (s) {
       var sym = String(s.simbolo || ""), k = s.posto + "|" + sym;
-      if (!on[k] || !isFiat(doc, sym)) { rest.push(s); return; }
-      var b = bank[k] || (bank[k] = { key: k, place: s.posto, placeName: names[s.posto] || s.posto, sym: sym, qty: 0, accounts: [] });
+      if (!(on[k] && isFiat(doc, sym)) && !cp[s.posto]) { rest.push(s); return; }
+      var b = bank[k] || (bank[k] = { key: k, place: s.posto, placeName: names[s.posto] || s.posto, sym: sym, qty: 0, accounts: [], card: !!cp[s.posto] });
       var q = +s.quantita; if (isFinite(q)) b.qty += q;
       var c = ((posti[s.posto] || {}).conti || []).filter(function (x) { return x.nome === s.conto; })[0] || {};
       b.accounts.push({ name: s.conto, qty: isFinite(q) ? q : 0, status: c.stato || "ok", when: c.aggiornato || null });

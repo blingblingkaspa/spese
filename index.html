@@ -615,7 +615,7 @@ button.w-leg { cursor: pointer; }
     </div>
     <p class="income" id="incomeBox"></p>
     <div class="envelopes" id="envelopes"></div>
-    <div class="grand"><span>Saldo di tutte le buste</span><b class="num" id="totalAvail"></b></div>
+    <div class="grand"><span>In tutto, tutte le buste</span><b class="num" id="totalAvail"></b></div>
     <div class="notes" id="monthNotes" hidden></div>
   </section>
 
@@ -649,7 +649,6 @@ button.w-leg { cursor: pointer; }
     </div>
     <p class="avg-hero" id="avgHero"></p>
     <div class="card bullets" id="kpis"></div>
-    <label class="switch card" for="inv" style="padding:12px 16px">Conta anche gli investimenti<input type="checkbox" id="inv"></label>
     <div class="block">
       <div class="block-head"><h2 class="h">Per categoria</h2><button type="button" class="btn small" id="editPlan">Scrivi gli obiettivi</button></div>
       <p class="lead" id="planLead"></p>
@@ -781,9 +780,9 @@ button.w-leg { cursor: pointer; }
       </div>
     </details>
     <details class="sect" id="set-fiat">
-      <summary><span class="sect-t"><span class="h">Valute sugli exchange</span><span class="sect-hint">Euro e dollari da contare come conto in banca</span></span><svg class="sect-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary>
+      <summary><span class="sect-t"><span class="h">Valute sugli exchange e carte</span><span class="sect-hint">Euro, dollari e saldi delle carte da contare come conto</span></span><svg class="sect-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary>
       <div class="sect-body">
-        <p class="lead">Euro e dollari fermi su un exchange che non usi per le crypto. Spunta per contarli come conto in banca: escono dal totale crypto ed entrano nei conti. Togli la spunta quando li usi per comprare crypto.</p>
+        <p class="lead">Euro e dollari fermi su un exchange che non usi per le crypto. Spunta per contarli come conto in banca: escono dal totale crypto ed entrano nei conti. Togli la spunta quando li usi per comprare crypto. Il saldo delle carte (come ether.fi Cash) conta sempre come conto: sono soldi da spendere.</p>
         <div class="card group" id="wFiat"></div>
       </div>
     </details>
