@@ -1240,7 +1240,7 @@
     }).join("") : '<p class="small">' + (state.pf.doc ? "Nessun euro o dollaro sugli exchange." : "Compaiono quando arriva il file del programma sul PC.") + "</p>";
     // cards and payment apps: the whole balance counts as an account
     var doc = pfDoc(), cards = cardPlaces(doc), places = ((doc && doc.posti) || []).filter(function (p) { return p.tipo === "app" || p.tipo === "manuale"; });
-    if (places.length) box.innerHTML += '<p class="rule-sub" style="margin-top:6px">Carte e app di pagamento: tutto il saldo conta come conto</p>' + places.map(function (p, i) {
+    if (places.length) box.innerHTML += '<p class="rule-sub" style="margin-top:6px">Carte e app di pagamento: euro, dollari e stablecoin contano come conto</p>' + places.map(function (p, i) {
       return '<label class="switch w-fiat" for="wc' + i + '"><span>' + esc(p.nome || p.id) + "<small>" + (p.tipo === "app" ? "App di pagamento" : "Inserito a mano") + "</small></span>" +
         '<input type="checkbox" id="wc' + i + '" data-card="' + esc(p.id) + '"' + (cards[p.id] ? " checked" : "") + "></label>";
     }).join("");

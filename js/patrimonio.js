@@ -153,7 +153,7 @@ var PF = (function () {
     return Object.keys(out).map(function (k) { return out[k]; }).sort(function (a, b) { return a.placeName.localeCompare(b.placeName) || a.sym.localeCompare(b.sym); });
   }
   /* The file without the balances counted as a bank account, and those balances apart */
-  /* cards = {placeId: true}: everything on that place (a payment card) counts as a bank account, whatever the coin */
+  /* cards = {placeId: true}: the currencies and stablecoins on that place (a payment card) count as a bank account */
   function splitBank(doc, asBank, cards) {
     var on = asBank || {}, cp = cards || {};
     var any = function (o) { return Object.keys(o).some(function (k) { return o[k]; }); };
@@ -162,7 +162,8 @@ var PF = (function () {
     doc.posti.forEach(function (p) { posti[p.id] = p; });
     doc.saldi.forEach(function (s) {
       var sym = String(s.simbolo || ""), k = s.posto + "|" + sym;
-      if (!(on[k] && isFiat(doc, sym)) && !cp[s.posto]) { rest.push(s); return; }
+      // on a card only money counts as an account (currencies and stablecoins); a coin like ETHFI stays crypto
+      if (!(on[k] && isFiat(doc, sym)) && !(cp[s.posto] && (isFiat(doc, sym) || CASH[sym.toUpperCase()]))) { rest.push(s); return; }
       var b = bank[k] || (bank[k] = { key: k, place: s.posto, placeName: names[s.posto] || s.posto, sym: sym, qty: 0, accounts: [], card: !!cp[s.posto] });
       var q = +s.quantita; if (isFinite(q)) b.qty += q;
       var c = ((posti[s.posto] || {}).conti || []).filter(function (x) { return x.nome === s.conto; })[0] || {};
