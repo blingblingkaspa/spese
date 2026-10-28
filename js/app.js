@@ -962,7 +962,7 @@
   }
 
   /* ---------- Patrimonio: crypto, ETFs and the bank accounts together ---------- */
-  var W_CUR_KEY = "mm-w-cur", W = { level: null, dirty: false, editEtf: false }, WK = { cur: "eur", rate: null };
+  var W_CUR_KEY = "mm-w-cur", W = { level: null, dirty: false, editEtf: false, buyEtf: false, bought: null }, WK = { cur: "eur", rate: null };
   var SRC_LABEL = { poste: "Poste", fineco: "Fineco", etherfi: "Carta ether.fi (già nel saldo)", none: "Non contare" };
   function wCur() { return load(W_CUR_KEY) === "usd" ? "usd" : "eur"; }
   function wConv(x) { return WK.cur === "usd" ? x * WK.rate : x; }
@@ -980,6 +980,40 @@
   /* Where each account stands: what it earns (Impostazioni › Patrimonio › Conti che rendono) */
   function yieldOf(key) { var y = (wSet().yield || {})[key] || {}; return { rate: +y.rate > 0 ? +y.rate : 0, until: /^\d{4}-\d{2}-\d{2}$/.test(y.until || "") ? y.until : "" }; }
 
+  /* "2 Digital Security, 3 Global Water" */
+  function buyText(b, names) {
+    return Object.keys(b.items || {}).map(function (k) { return qty(+b.items[k]) + " " + (names[k] || k); }).join(", ");
+  }
+  /* A purchase adds its shares to the ones held; deleting it takes them away again */
+  function blurField() { var a = document.activeElement; if (a && a.blur && a !== document.body) a.blur(); }
+  function saveEtfBuy() {
+    var w = wSet(), items = {}, bad = false;
+    document.querySelectorAll("#wBody input[data-buy]").forEach(function (i) {
+      if (!i.value.trim()) return;
+      var n = parseQty(i.value); if (n === null || n <= 0) { bad = true; return; }
+      items[i.dataset.buy] = n;
+    });
+    blurField();
+    if (bad) { W.buyErr = "Una quantità non è un numero valido."; renderWealth(); return; }
+    if (!Object.keys(items).length) { W.buyErr = "Scrivi quante quote hai comprato di almeno un ETF."; renderWealth(); return; }
+    var d = $("etfBuyDate") && /^\d{4}-\d{2}-\d{2}$/.test($("etfBuyDate").value) ? $("etfBuyDate").value : today();
+    var etf = Object.assign({}, w.etf || {}), now = new Date().toISOString();
+    Object.keys(items).forEach(function (k) { var cur = etf[k] || {}; etf[k] = { qty: r6((+cur.qty || 0) + items[k]), at: now }; });
+    var buy = { id: "b" + Date.now().toString(36), date: d, items: items, at: now };
+    var names = {}; PF.etfs(state.pf.doc, etf, null).forEach(function (e) { names[e.isin] = e.name; });
+    saveWealth({ etf: etf, etfBuys: (w.etfBuys || []).concat([buy]) });
+    W.buyEtf = false; W.buyErr = null; W.bought = buyText(buy, names);
+    renderWealth();
+  }
+  function deleteEtfBuy(id) {
+    var w = wSet(), buy = (w.etfBuys || []).filter(function (b) { return b.id === id; })[0]; if (!buy) return;
+    var etf = Object.assign({}, w.etf || {}), now = new Date().toISOString();
+    Object.keys(buy.items || {}).forEach(function (k) { var cur = etf[k] || {}; etf[k] = { qty: Math.max(0, r6((+cur.qty || 0) - +buy.items[k])), at: now }; });
+    W.bought = null;
+    saveWealth({ etf: etf, etfBuys: (w.etfBuys || []).filter(function (b) { return b.id !== id; }) });
+    renderWealth();
+  }
+  function r6(x) { return Math.round(x * 1e6) / 1e6; }
   function yieldTag(key) {
     var y = yieldOf(key);
     if (!y.rate) return "fermo";
@@ -1183,14 +1217,34 @@
 
 
     // ETFs: shares typed once a month, price from the PC
-    h += '<div id="wEtf" class="block-anchor"></div><div class="block"><div class="block-head"><h2 class="h">ETF</h2>' + (D.et.length ? '<button type="button" class="btn small' + (W.editEtf ? " primary" : "") + '" data-w="etf-edit">' + (W.editEtf ? "Fatto" : "Aggiorna quote") + "</button>" : "") + "</div>";
+    var etfBtns = !D.et.length ? "" : W.buyEtf ? "" : W.editEtf ? '<button type="button" class="btn small primary" data-w="etf-edit">Fatto</button>' :
+      '<span class="btnrow"><button type="button" class="btn small primary" data-w="etf-buy">Nuovo acquisto</button><button type="button" class="btn small" data-w="etf-edit">Aggiorna quote</button></span>';
+    h += '<div id="wEtf" class="block-anchor"></div><div class="block"><div class="block-head"><h2 class="h">ETF</h2>' + etfBtns + "</div>";
     if (!D.et.length) h += '<div class="card group"><p>Aggiungi gli ISIN dei tuoi ETF nel programma sul PC (config.json, voce "etf"): da lì arriva il prezzo. Le quote poi le scrivi qui.</p></div>';
+    else if (W.buyEtf) {
+      // a purchase on Fineco: the shares bought are added to the ones you have; the money spent comes from Money Manager
+      h += '<div class="card group"><h3 class="h">Nuovo acquisto su Fineco</h3>' +
+        '<p>Scrivi quante quote hai comprato di ogni ETF: le aggiungo a quelle che hai. Quanto hai speso lo prendo dalle spese in Money Manager (Investimenti › ETF), come il saldo di Fineco.</p>' +
+        '<label class="field-l" for="etfBuyDate" style="max-width:200px">Data dell\'acquisto<input type="date" id="etfBuyDate" value="' + today() + '"></label>' +
+        D.et.map(function (e) {
+          return '<div class="w-buy"><span class="nm">' + esc(e.name) + "<small>ora " + (e.qty ? qty(e.qty) + (e.qty === 1 ? " quota" : " quote") : "nessuna quota") + "</small></span>" +
+            '<label for="etfb-' + esc(e.isin) + '">Comprate<input type="text" inputmode="decimal" id="etfb-' + esc(e.isin) + '" data-buy="' + esc(e.isin) + '" placeholder="0" autocomplete="off"></label></div>';
+        }).join("") +
+        (W.buyErr ? '<p class="warn-text">' + esc(W.buyErr) + "</p>" : "") +
+        '<div class="btnrow"><button type="button" class="btn small primary" data-w="etf-buy-save">Salva acquisto</button><button type="button" class="btn small" data-w="etf-buy-cancel">Annulla</button></div></div>';
+    }
     else if (!W.editEtf) {
       h += '<div class="card pf-list">' + D.et.map(function (e) {
         var p = e.price !== null ? (e.cur === "EUR" ? eur2F.format(e.price) : e.price.toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " " + e.cur) : null;
         return '<div class="w-ro' + (e.qty ? "" : " off") + '"><span>' + esc(e.name) + "<small>" + (e.qty ? qty(e.qty) + (e.qty === 1 ? " quota" : " quote") + (p ? " × " + p : "") : "Nessuna quota" + (p ? " · " + p : "")) + (p ? "" : e.error ? " · prezzo non trovato" : " · prezzo in arrivo") +
           (e.qtyAt ? " · quote del " + esc(shortDate(e.qtyAt)) : "") + "</small></span><b>" + (e.priceEur !== null ? wm2(e.value) : "—") + "</b></div>";
       }).join("") + "</div>";
+      if (W.bought) h += '<p class="note-i" style="margin-top:2px">' + ICON_INFO + "<span>Acquisto salvato: " + esc(W.bought) + ".</span></p>";
+      var buys = (w.etfBuys || []).slice().sort(function (a, b) { return b.date < a.date ? -1 : b.date > a.date ? 1 : 0; }).slice(0, 6), names = {};
+      D.et.forEach(function (e) { names[e.isin] = e.name; });
+      if (buys.length) h += '<h3 class="h" style="margin-top:8px">Ultimi acquisti</h3><div class="card pf-list">' + buys.map(function (b) {
+        return '<div class="w-ro"><span>' + esc(longDate(b.date)) + "<small>" + esc(buyText(b, names)) + '</small></span><button type="button" class="btn small" data-buydel="' + esc(b.id) + '" aria-label="Elimina l\'acquisto del ' + esc(longDate(b.date)) + '">Elimina</button></div>';
+      }).join("") + '</div><p class="small">Elimina toglie le quote di quell\'acquisto da quelle che hai.</p>';
     } else {
       h += '<p class="lead">Scrivi quante quote hai: aggiornale una volta al mese. Il prezzo arriva dal programma sul PC.</p><div class="card">' + D.et.map(function (e) {
         var p = e.price !== null ? (e.cur === "EUR" ? eur2F.format(e.price) : e.price.toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " " + e.cur) : null;
@@ -1365,7 +1419,8 @@
     store(W_CUR_KEY, b.dataset.cur); renderWealth();
   });
   $("wBody").addEventListener("click", function (e) {
-    var b = e.target.closest("[data-w],[data-open]"); if (!b) return;
+    var b = e.target.closest("[data-w],[data-open],[data-buydel]"); if (!b) return;
+    if (b.dataset.buydel) { deleteEtfBuy(b.dataset.buydel); return; }
     if (b.dataset.open) {
       var open = b.getAttribute("aria-expanded") !== "true", det = document.getElementById(b.getAttribute("aria-controls"));
       b.setAttribute("aria-expanded", String(open)); if (det) det.hidden = !open;
@@ -1376,6 +1431,9 @@
     if (k === "back") { W.level = null; renderWealth(); }
     else if (k === "conti" || k === "etf" || k === "crypto") { W.level = k; renderWealth(); }
     else if (k === "open-crypto") { showView("crypto"); window.scrollTo(0, 0); }
+    else if (k === "etf-buy") { W.buyEtf = true; W.editEtf = false; W.buyErr = null; W.bought = null; renderWealth(); var fi = document.querySelector("#wBody input[data-buy]"); if (fi) fi.focus(); }
+    else if (k === "etf-buy-save") saveEtfBuy();
+    else if (k === "etf-buy-cancel") { blurField(); W.buyEtf = false; W.buyErr = null; renderWealth(); }
     else if (k === "etf-edit") { W.editEtf = !W.editEtf; renderWealth(); if (W.editEtf) { var first = document.querySelector("#wBody input[data-etf]"); if (first) first.focus(); } }
     else if (k === "setup") openSettingsAt("set-wealth");
     else if (k === "setup-fiat") openSettingsAt("set-fiat");

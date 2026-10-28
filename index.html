@@ -451,6 +451,12 @@ button.w-leg { cursor: pointer; }
 .w-top label { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--ink-2); cursor: pointer; }
 .w-top input { width: 18px; height: 18px; margin: 0; accent-color: var(--ink); }
 .w-top.off > span:first-child { color: var(--muted); text-decoration: line-through; }
+.w-buy { display: grid; grid-template-columns: minmax(0, 1fr) 110px; gap: 4px 12px; align-items: end; padding: 10px 0; border-top: 1px solid var(--line); }
+.w-buy .nm { font-size: 15px; font-weight: 600; overflow-wrap: anywhere; padding-bottom: 6px; }
+.w-buy .nm small { display: block; font-size: 12.5px; font-weight: 450; color: var(--muted); }
+.w-buy label { display: grid; gap: 3px; font-size: 11.5px; color: var(--muted); }
+.w-buy input { min-height: 40px; text-align: right; padding: 0 10px; }
+.w-ro .btn { align-self: center; }
 .w-etf { display: grid; grid-template-columns: minmax(0, 1fr) 100px; gap: 4px 12px; align-items: end; padding: 11px 0; border-bottom: 1px solid var(--line); }
 .w-etf:last-child { border-bottom: 0; }
 .w-etf .nm { font-size: 15px; font-weight: 600; overflow-wrap: anywhere; }
