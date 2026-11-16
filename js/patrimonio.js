@@ -252,7 +252,96 @@ var PF = (function () {
     return out;
   }
 
+  /* ---------- Stocks: the list and the purchases are typed on the site, the price comes live from Finnhub ---------- */
+  var FH = "https://finnhub.io/api/v1", SPX_KEY = "mm-stock-px-v1";
+  function stockCache() { try { return JSON.parse(localStorage.getItem(SPX_KEY) || "{}") || {}; } catch (e) { return {}; } }
+  function saveStockCache(c) { try { localStorage.setItem(SPX_KEY, JSON.stringify(c)); } catch (e) {} }
+  function fhGet(path, key) {
+    if (typeof navigator !== "undefined" && navigator.onLine === false) return Promise.reject({ code: "offline" });
+    return fetch(FH + path + (path.indexOf("?") < 0 ? "?" : "&") + "token=" + encodeURIComponent(key), { cache: "no-store" }).then(function (r) {
+      if (r.status === 401) throw { code: "key" };
+      if (r.status === 403) throw { code: "access" };
+      if (r.status === 429) throw { code: "limit" };
+      if (!r.ok) throw { code: "http" };
+      return r.json();
+    }, function () { throw { code: "net" }; });
+  }
+  /* The last price of each ticker; a ticker the free plan does not cover keeps its error, the others their price */
+  function fetchStocks(syms, key) {
+    var c = stockCache(), seen = {}, day = Date.now() - 86400000;
+    // a ticker the free plan does not cover (or Finnhub does not know) is asked again only the next day
+    var list = (syms || []).filter(function (s) {
+      if (!s || seen[s]) return false; seen[s] = 1;
+      var x = c[s]; return !(x && (x.err === "access" || x.err === "not-found") && new Date(x.errAt).getTime() > day);
+    });
+    if (!key || !list.length) return Promise.resolve(c);
+    var fatal = null;
+    return Promise.all(list.map(function (s) {
+      return fhGet("/quote?symbol=" + encodeURIComponent(s), key).then(function (q) {
+        var p = +q.c;
+        if (!(p > 0) && !(+q.t > 0)) { c[s] = Object.assign({}, c[s] || {}, { err: "not-found", errAt: new Date().toISOString() }); return; }
+        c[s] = { p: p, pc: +q.pc || null, d: isFinite(+q.d) ? +q.d : null, dp: isFinite(+q.dp) ? +q.dp : null, t: +q.t > 0 ? new Date(q.t * 1000).toISOString() : null, at: new Date().toISOString() };
+      }).catch(function (e) {
+        var code = (e && e.code) || "http";
+        if (code === "key" || code === "limit" || code === "offline" || code === "net") { fatal = fatal || code; return; }
+        c[s] = Object.assign({}, c[s] || {}, { err: code, errAt: new Date().toISOString() });
+      });
+    })).then(function () {
+      saveStockCache(c);
+      if (fatal && !list.some(function (s) { return c[s] && c[s].at && !c[s].err; })) throw { code: fatal, cache: c };
+      if (fatal) c._err = fatal; else delete c._err;
+      return c;
+    });
+  }
+  /* Search by name or ticker, US stocks first (the ones with a live price on the free plan) */
+  function searchStocks(q, key) {
+    return fhGet("/search?q=" + encodeURIComponent(q), key).then(function (r) {
+      var out = ((r && r.result) || []).filter(function (x) { return x && x.symbol && (!x.type || /stock|adr|reit/i.test(x.type)); });
+      out.sort(function (a, b) { return (a.symbol.indexOf(".") >= 0) - (b.symbol.indexOf(".") >= 0); });
+      return out.slice(0, 8).map(function (x) { return { sym: x.symbol, name: x.description || x.symbol, us: x.symbol.indexOf(".") < 0 }; });
+    });
+  }
+  /* Shares held, average price paid (when the purchases have it), value and gain in the stock's currency and in euros */
+  function stocks(list, cache, eurUsd) {
+    return (list || []).map(function (s) {
+      var buys = (s.buys || []).slice().sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : String(a.at || "") < String(b.at || "") ? -1 : 1; });
+      var held = 0, cost = 0, known = true;
+      buys.forEach(function (b) {
+        var q = +b.qty || 0, pr = +b.price;
+        if (q > 0) { held += q; if (pr > 0) cost += q * pr; else known = false; }
+        else if (q < 0) { if (held > 0) cost -= cost / held * Math.min(held, -q); held += q; }
+      });
+      held = Math.round(held * 1e6) / 1e6; if (held <= 0) { held = Math.max(0, held); cost = 0; }
+      var live = (cache || {})[s.sym] || null, man = s.manual && +s.manual.p > 0 ? s.manual : null;
+      var useLive = live && live.p > 0 && !live.err && (!man || String(live.at) >= String(man.at));
+      var price = useLive ? live.p : man ? +man.p : null, cur = String(s.cur || "USD").toUpperCase();
+      var fx = cur === "EUR" ? 1 : cur === "USD" && eurUsd ? 1 / eurUsd : null;
+      var avg = known && held > 0 && cost > 0 ? cost / held : null;
+      var priceEur = price !== null && fx !== null ? price * fx : null;
+      return { id: s.id, sym: s.sym, name: s.name || s.sym, cur: cur, qty: held, buys: buys, price: price, priceEur: priceEur,
+        live: useLive, priceAt: useLive ? (live.t || live.at) : man ? man.at : null, dp: useLive ? live.dp : null,
+        dayEur: useLive && live.d !== null && fx !== null ? live.d * held * fx : null,
+        err: live && live.err && !useLive ? live.err : null, avg: avg,
+        value: priceEur !== null ? held * priceEur : 0, costEur: avg !== null && fx !== null ? avg * held * fx : null,
+        gainEur: avg !== null && priceEur !== null ? (price - avg) * held * fx : null };
+    });
+  }
+  /* What the Money Manager expenses under Investimenti › Azioni add up to */
+  function isStock(macro, sub) { return /invest/i.test(macro) && /azion|stock|share/i.test(sub); }
+  function stockSpent(rows) {
+    var tot = 0, n = 0;
+    (rows || []).forEach(function (r) {
+      if (String(r.type) !== "1") return;
+      var macro = cleanText(r.pname || r.cname), sub = r.pname ? cleanText(r.cname) : "";
+      if (!isStock(macro, sub)) return;
+      var amt = parseFloat(r.money); if (!isFinite(amt)) amt = parseFloat(r.amt2);
+      if (isFinite(amt)) { tot += amt; n++; }
+    });
+    return { total: tot, n: n };
+  }
+
   return { valid: valid, parse: parse, cached: cached, cache: cache, cachedPrices: cachedPrices, fetchPrices: fetchPrices, compute: compute, ids: ids,
     withManual: withManual, cleanSym: cleanSym, KNOWN: KNOWN, banks: banks, etfs: etfs, accountSource: accountSource,
-    fiatSpots: fiatSpots, splitBank: splitBank, fiatEur: fiatEur };
+    fiatSpots: fiatSpots, splitBank: splitBank, fiatEur: fiatEur,
+    stockCache: stockCache, fetchStocks: fetchStocks, searchStocks: searchStocks, stocks: stocks, stockSpent: stockSpent };
 })();

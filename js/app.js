@@ -261,7 +261,7 @@
     else if (v === "analisi") renderAnalysis();
     else if (v === "movimenti") renderMoves();
     else if (v === "crypto") { renderCrypto(); refreshPrices(false); }
-    else if (v === "patrimonio") { renderWealth(); refreshPrices(false); }
+    else if (v === "patrimonio") { renderWealth(); refreshPrices(false); refreshStocks(false); }
     else if (v === "impostazioni") renderSettings();
   }
 
@@ -1028,6 +1028,7 @@
     var et = PF.etfs(pf.doc, w.etf, rate);
     var crypto = R && rate ? R.total / rate : 0;
     var etf = et.reduce(function (t, e) { return t + e.value; }, 0);
+    var st = PF.stocks(w.stocks, STK.cache, rate), stk = st.reduce(function (t, s) { return t + s.value; }, 0);
     var P = bk.banks.poste, F = bk.banks.fineco;
     // currencies on an exchange counted as a bank account (for example the euros parked on OKX)
     var ex = split.bank.map(function (b) { b.eur = PF.fiatEur(doc, pf.prices, b.sym, b.qty, rate); return b; });
@@ -1049,8 +1050,8 @@
     // stablecoins and currencies still counted with the crypto: money ready to use, not invested
     var coins = R && rate ? R.coins.filter(function (c) { return Math.abs(c.value / rate) >= 0.5; }).map(function (c) { return { label: c.sym, value: c.value / rate }; }) : [];
     var stable = R && rate ? R.cash / rate : 0, cryptoVol = crypto - stable;
-    var liquidity = conti + stable, invested = etf + cryptoVol;
-    return { R: R, rate: rate, bk: bk, et: et, crypto: crypto, etf: etf, coins: coins, ex: ex, exTot: exTot, conti: conti, total: crypto + etf + conti,
+    var liquidity = conti + stable, invested = etf + stk + cryptoVol;
+    return { R: R, rate: rate, bk: bk, et: et, st: st, stk: stk, crypto: crypto, etf: etf, coins: coins, ex: ex, exTot: exTot, conti: conti, total: crypto + etf + stk + conti,
       accs: accs, yieldTot: yieldTot, idleTot: conti - yieldTot, interest: interest, stable: stable, cryptoVol: cryptoVol, liquidity: liquidity, invested: invested };
   }
 
@@ -1146,6 +1147,7 @@
     // the donut: what you have by kind, then inside one kind
     var top = [{ key: "conti", label: "Conti", value: D.conti, color: "var(--s1)", note: bk.set ? "" : "da scrivere" },
       { key: "etf", label: "ETF", value: D.etf, color: "var(--s2)" }, { key: "crypto", label: "Crypto", value: D.crypto, color: "var(--s3)" }];
+    if (D.st.length) top.push({ key: "azioni", label: "Azioni", value: D.stk, color: "var(--s4)" });
     var lvl = W.level, slices, title, mid, midLabel;
     if (lvl === "conti") {
       slices = [{ label: "Poste", value: P.value }, { label: "Fineco", value: F.value }].concat(D.ex.map(function (b) { return { label: b.placeName, note: b.sym, value: b.eur || 0 }; }));
@@ -1153,6 +1155,7 @@
     }
     else if (lvl === "etf") { slices = topN(D.et.map(function (e) { return { label: e.name, value: e.value }; }), 6, "ETF"); title = "ETF"; }
     else if (lvl === "crypto") { slices = topN(D.coins, 6, "monete"); title = "Crypto"; }
+    else if (lvl === "azioni" && D.st.length) { slices = topN(D.st.map(function (x) { return { label: x.name, value: x.value }; }), 6, "azioni"); title = "Azioni"; }
     else { slices = top; title = "Dove sono"; lvl = null; }
     var tot = slices.reduce(function (t, s) { return t + Math.max(0, s.value); }, 0);
     mid = bigNum(wm0(lvl === "crypto" ? D.crypto : lvl ? slices.reduce(function (t, s) { return t + s.value; }, 0) : D.total)); midLabel = lvl ? "in " + title.toLowerCase() : "in tutto";
@@ -1255,6 +1258,8 @@
     }
     h += "</div>";
 
+    h += stocksBlock(D, w);
+
     // what to know
     var notes = [];
     if (bk.set && (P.value < 0 || F.value < 0)) notes.push([ICON_WARN, "Un saldo calcolato è sotto zero: probabilmente manca un movimento. Aggiorna i saldi di partenza in Impostazioni."]);
@@ -1263,10 +1268,15 @@
     if (D.ex.some(function (b) { return b.eur === null; })) notes.push([ICON_WARN, "Una valuta contata come conto non ha ancora il cambio in euro: è fuori dal totale."]);
     if (!state.pf.doc) notes.push([ICON_INFO, "Le crypto arrivano dal programma sul PC (patrimonio.json): finché non c'è, conto solo quelle inserite a mano."]);
     if (D.et.some(function (e) { return e.qty && e.priceEur === null; })) notes.push([ICON_INFO, "Un ETF non ha ancora un prezzo in euro: è fuori dal totale."]);
+    if (D.st.some(function (x) { return x.qty > 0 && x.priceEur === null; })) notes.push([ICON_INFO, "Un'azione non ha ancora un prezzo in euro: è fuori dal totale finché non arriva o non lo scrivi tu."]);
     if (noRate) notes.push([ICON_INFO, "Mostro gli euro finché non arriva il cambio con il dollaro."]);
-    notes.push([ICON_INFO, "Liquidità: conti, stablecoin e valute sugli exchange. Investito: ETF e crypto. Le crypto sono convertite con il cambio di USDT; i contanti non sono contati."]);
+    notes.push([ICON_INFO, "Liquidità: conti, stablecoin e valute sugli exchange. Investito: ETF, azioni e crypto. Le crypto sono convertite con il cambio di USDT; i contanti non sono contati."]);
     h += '<div class="notes">' + notes.map(function (n) { return '<p class="note-i">' + n[0] + "<span>" + n[1] + "</span></p>"; }).join("") + "</div>";
+    var typed = {}, res = $("stkRes") ? $("stkRes").innerHTML : "";
+    if (W.sf || W.buyEtf) box.querySelectorAll(".stk-form input[id], .stk-form select[id], input[data-buy]").forEach(function (i) { if (i.type !== "hidden") typed[i.id] = i.value; });
     box.innerHTML = h;
+    Object.keys(typed).forEach(function (id) { if ($(id)) $(id).value = typed[id]; });
+    if (res && $("stkRes")) $("stkRes").innerHTML = res;
 
     if (hist.length >= 2) {
       var pts = hist.map(function (p) { return { t: new Date(p.d + "T12:00:00").getTime(), v: wConv(+p.t), p: p }; });
@@ -1280,6 +1290,191 @@
         }
       });
     }
+  }
+
+  /* ---------- Azioni: the stocks typed on the site, the price live from Finnhub ---------- */
+  var STK = { cache: PF.stockCache(), loading: false, at: 0, err: null, results: null };
+  function fhKey() { return String(wSet().fhKey || "").trim(); }
+  function stkList() { return (wSet().stocks || []).slice(); }
+  function stkPx(p, cur) {
+    if (p === null || p === undefined) return "—";
+    if (cur === "EUR") return minus(eur2F.format(p));
+    if (cur === "USD") return minus(usdF2.format(p));
+    return minus(p.toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })) + " " + cur;
+  }
+  /* "APPLE INC" → "Apple Inc" (two-letter words like AG stay as they are) */
+  function niceName(t) { return String(t || "").replace(/\b([A-Z])([A-Z]{2,})\b/g, function (m, a, r) { return a + r.toLowerCase(); }); }
+  function nAz(n) { return qty(n) + (n === 1 ? " azione" : " azioni"); }
+  var STK_ERR = { key: "La chiave di Finnhub non va: controllala in Impostazioni › Azioni.", limit: "Finnhub ha rifiutato per troppe richieste: riprovo tra un minuto.",
+    offline: "Sei offline: mostro gli ultimi prezzi arrivati.", net: "Finnhub non risponde: mostro gli ultimi prezzi arrivati.", http: "Finnhub non risponde: mostro gli ultimi prezzi arrivati." };
+  /* Every minute while Patrimonio is open: Finnhub's free plan allows 60 requests a minute */
+  function refreshStocks(force) {
+    var key = fhKey(), syms = stkList().map(function (s) { return s.sym; });
+    if (!key || !syms.length || STK.loading) return;
+    if (!force && Date.now() - STK.at < 55000) return;
+    STK.loading = true; STK.at = Date.now();
+    PF.fetchStocks(syms, key).then(function (c) { STK.cache = c; STK.err = c._err || null; })
+      .catch(function (e) { if (e && e.cache) STK.cache = e.cache; STK.err = (e && e.code) || "http"; })
+      .then(function () {
+        STK.loading = false;
+        // an open form keeps what you typed: the new prices show when it closes
+        if (state.view === "patrimonio" && !W.sf) renderWealth();
+        if (state.view === "impostazioni") renderStockKey();
+      });
+  }
+  setInterval(function () { if (state.view === "patrimonio" && document.visibilityState === "visible") refreshStocks(false); }, 60000);
+  function stkSave(list) { saveWealth({ stocks: list }); }
+  function stkId(p) { return p + Date.now().toString(36) + Math.floor(Math.random() * 1e4).toString(36); }
+  function val(id) { var el = $(id); return el ? String(el.value || "").trim() : ""; }
+  /* The form for a new stock, a purchase or a sale */
+  function stockForm(D) {
+    var f = W.sf, key = fhKey(), h = '<div class="card group stk-form">';
+    var dateF = '<label class="field-l stk-date" for="stkDate">Data<input type="date" id="stkDate" value="' + esc(f.date || today()) + '"></label>';
+    if (f.mode === "new") {
+      h += '<h3 class="h">Nuova azione</h3>';
+      if (key) h += '<div class="stk-search"><input type="search" id="stkQ" placeholder="Nome o ticker, per esempio Apple" autocomplete="off" enterkeyhint="search" aria-label="Cerca un\'azione"><button type="button" class="btn small" data-w="stk-search">Cerca</button></div><div id="stkRes" class="stk-res" aria-live="polite"></div>';
+      else h += '<p>Per il prezzo in tempo reale serve la chiave gratuita di Finnhub: <button type="button" class="linkbtn" data-w="setup-stocks">aggiungila in Impostazioni</button>. Senza, scrivi tu ticker e nome e poi il prezzo a mano.</p>';
+      h += '<div class="stk-grid3 stk-id"><label class="field-l" for="stkSym">Ticker<input type="text" id="stkSym" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="AAPL"></label>' +
+        '<label class="field-l" for="stkName">Nome<input type="text" id="stkName" autocomplete="off" placeholder="Apple"></label>' +
+        '<label class="field-l" for="stkCur">Valuta<select class="field" id="stkCur"><option value="USD">$</option><option value="EUR">€</option></select></label></div>' +
+        '<p class="rule-sub">Primo acquisto</p>';
+    } else {
+      var all = D.st, S = all.filter(function (x) { return x.id === f.id; })[0] || all[0];
+      h += '<h3 class="h">' + (f.sell ? "Vendita" : "Nuovo acquisto") + "</h3>";
+      if (!f.fixed && all.length > 1) h += '<label class="field-l" for="stkWhich">Azione<select class="field" id="stkWhich">' + all.map(function (x) { return '<option value="' + esc(x.id) + '"' + (x === S ? " selected" : "") + ">" + esc(x.name) + " · " + esc(x.sym) + "</option>"; }).join("") + "</select></label>";
+      else h += '<p class="stk-which"><b>' + esc(S.name) + "</b> · " + esc(S.sym) + " · ora " + nAz(S.qty) + '</p><input type="hidden" id="stkWhich" value="' + esc(S.id) + '">';
+      h += '<div class="seg stk-kind" role="group" aria-label="Tipo"><button type="button" data-w="stk-kind:buy" aria-pressed="' + !f.sell + '">Acquisto</button><button type="button" data-w="stk-kind:sell" aria-pressed="' + !!f.sell + '">Vendita</button></div>';
+    }
+    h += dateF + '<div class="stk-grid3 stk-two">' +
+      '<label class="field-l" for="stkQty">Azioni<input type="text" inputmode="decimal" id="stkQty" placeholder="0" autocomplete="off"></label>' +
+      '<label class="field-l" for="stkPrice">Prezzo per azione<input type="text" inputmode="decimal" id="stkPrice" placeholder="facoltativo" autocomplete="off"></label></div>' +
+      '<p class="small">Il prezzo pagato serve per il guadagno. Quanto hai speso in euro lo vedi comunque dalle spese in Money Manager (Investimenti › Azioni).</p>' +
+      (W.sErr ? '<p class="warn-text">' + esc(W.sErr) + "</p>" : "") +
+      '<div class="btnrow"><button type="button" class="btn small primary" data-w="stk-save">Salva</button><button type="button" class="btn small" data-w="stk-cancel">Annulla</button></div></div>';
+    return h;
+  }
+  function stocksBlock(D, w) {
+    var list = D.st, key = fhKey(), h = '<div id="wAzioni" class="block-anchor"></div><div class="block"><div class="block-head"><h2 class="h">Azioni</h2>';
+    if (!W.sf) h += '<span class="btnrow">' + (list.length ? '<button type="button" class="btn small primary" data-w="stk-buy">Nuovo acquisto</button>' : "") + '<button type="button" class="btn small' + (list.length ? "" : " primary") + '" data-w="stk-new">Nuova azione</button></span>';
+    h += "</div>";
+    if (W.sf) return h + stockForm(D) + "</div>";
+    if (!list.length) {
+      return h + '<div class="card group"><p>Aggiungi le azioni che hai: scrivi quante ne hai comprate e il prezzo si aggiorna da solo ogni minuto' + (key ? "." : ', con la chiave gratuita di Finnhub (<button type="button" class="linkbtn" data-w="setup-stocks">Impostazioni › Azioni</button>).') + "</p></div></div>";
+    }
+    var spent = PF.stockSpent(state.rows), day = list.reduce(function (t, s) { return s.dayEur !== null ? t + s.dayEur : t; }, 0), anyDay = list.some(function (s) { return s.dayEur !== null && s.qty > 0; });
+    h += '<p class="lead">Valgono <b>' + wm2(D.stk) + "</b>" + (anyDay ? ', oggi <span class="' + (day >= 0 ? "pos" : "neg") + '">' + (day >= 0 ? "+" : "") + wm2(day) + "</span>" : "") + "." +
+      (spent.n ? " In Money Manager hai speso " + wm2(spent.total) + " in azioni (Investimenti › Azioni)." : "") + "</p>";
+    h += '<div class="card pf-list">' + list.map(function (s) {
+      var gain = s.gainEur, gpct = gain !== null && s.costEur > 0 ? gain / s.costEur * 100 : null;
+      var sub = s.qty > 0 ? nAz(s.qty) + (s.price !== null ? " × " + stkPx(s.price, s.cur) : "") : "Nessuna azione";
+      if (s.dp !== null && s.price !== null) sub += ' · <span class="' + (s.dp >= 0 ? "pos" : "neg") + '">' + pctTxt(s.dp) + " oggi</span>";
+      if (s.price === null) sub += " · " + pfFlag(s.err ? "prezzo da scrivere" : key ? "prezzo in arrivo" : "prezzo da scrivere", true);
+      var row = '<span class="pf-l"><b>' + esc(s.name) + "</b><small>" + sub + "</small></span>" +
+        '<span class="pf-r"><b>' + (s.priceEur !== null ? wm2(s.value) : "—") + "</b><small" + (gain !== null ? ' class="' + (gain >= 0 ? "pos" : "neg") + '">' + (gain >= 0 ? "+" : "") + wm2(gain) : ">" + (D.total > 0 && s.value > 0 ? share(s.value / D.total) : "")) + "</small></span>" + CHEV;
+      var det = '<div class="pf-det-h"><span>Ticker <b>' + esc(s.sym) + "</b></span>" + (s.price !== null ? "<span>Prezzo <b>" + stkPx(s.price, s.cur) + "</b> " + (s.live ? "· " + esc(when(s.priceAt)) : "· scritto a mano " + esc(when(s.priceAt))) + "</span>" : "") + "</div>";
+      det += '<div class="w-calc"><div><span>Azioni</span><b>' + qty(s.qty) + "</b></div>" +
+        (s.avg !== null ? "<div><span>Prezzo medio pagato</span><b>" + stkPx(s.avg, s.cur) + "</b></div><div><span>Pagate</span><b>" + wm2(s.costEur || 0) + "</b></div>" : "") +
+        '<div class="tot"><span>Valore di oggi</span><b>' + (s.priceEur !== null ? wm2(s.value) : "—") + "</b></div>" +
+        (gain !== null ? '<div><span>Guadagno</span><b class="' + (gain >= 0 ? "pos" : "neg") + '">' + (gain >= 0 ? "+" : "") + wm2(gain) + (gpct !== null ? " · " + pctTxt(gpct) : "") + "</b></div>" : "") + "</div>";
+      if (s.err === "access") det += '<p class="pf-det-n">Il piano gratuito di Finnhub dà il prezzo solo delle azioni americane: scrivi tu il prezzo qui sotto.</p>';
+      else if (s.err === "not-found") det += '<p class="pf-det-n">Finnhub non trova il ticker ' + esc(s.sym) + ": controlla che sia giusto, oppure scrivi tu il prezzo qui sotto.</p>";
+      if (!s.live) det += '<label class="field-l stk-man" for="stm-' + esc(s.id) + '">Prezzo a mano (' + (s.cur === "EUR" ? "€" : s.cur === "USD" ? "$" : esc(s.cur)) + ')<input type="text" inputmode="decimal" id="stm-' + esc(s.id) + '" data-stkman="' + esc(s.id) + '" value="' + (s.price !== null ? esc(String(s.price).replace(".", ",")) : "") + '" placeholder="0,00" autocomplete="off"></label>';
+      if (s.buys.length) det += '<p class="w-sub">Acquisti e vendite</p>' + s.buys.slice().reverse().map(function (b) {
+        var q = +b.qty;
+        return '<div class="w-ro"><span>' + esc(longDate(b.date)) + "<small>" + (q >= 0 ? "Comprate " : "Vendute ") + qty(Math.abs(q)) + (+b.price > 0 ? " a " + stkPx(+b.price, s.cur) : "") + "</small></span>" +
+          '<button type="button" class="btn small" data-w="stk-bdel:' + esc(s.id) + ":" + esc(b.id) + '" aria-label="Elimina l\'operazione del ' + esc(longDate(b.date)) + '">Elimina</button></div>';
+      }).join("");
+      det += '<div class="btnrow" style="margin-top:10px"><button type="button" class="btn small primary" data-w="stk-buy:' + esc(s.id) + '">Acquisto</button><button type="button" class="btn small" data-w="stk-sell:' + esc(s.id) + '"' + (s.qty > 0 ? "" : " disabled") + ">Vendita</button>" +
+        '<button type="button" class="btn small" data-w="stk-del:' + esc(s.id) + '">' + (W.sDel === s.id ? "Tocca ancora per togliere" : "Togli dalla lista") + "</button></div>";
+      return pfItem("w:s:" + s.id, row, det);
+    }).join("") + "</div>";
+    if (W.sMsg) h += '<p class="note-i" style="margin-top:2px">' + ICON_INFO + "<span>" + esc(W.sMsg) + "</span></p>";
+    var lastAt = list.map(function (s) { return s.live ? STK.cache[s.sym] && STK.cache[s.sym].at : null; }).filter(Boolean).sort().slice(-1)[0];
+    h += '<p class="small">' + (!key ? 'Prezzi scritti a mano. Per averli in tempo reale aggiungi la chiave gratuita di Finnhub in <button type="button" class="linkbtn" data-w="setup-stocks">Impostazioni › Azioni</button>.' :
+      STK.err ? esc(STK_ERR[STK.err] || STK_ERR.http) : "Prezzi in tempo reale da Finnhub, aggiornati ogni minuto mentre questa pagina è aperta" + (lastAt ? " · ultimo " + esc(when(lastAt)) : "") + ".") + "</p>";
+    return h + "</div>";
+  }
+  function stkOpenForm(f) { W.sf = f; W.sErr = null; W.sMsg = null; W.sDel = null; STK.results = null; renderWealth(); var a = $("wAzioni"); if (a) a.scrollIntoView({ block: "start" }); var fi = $(f.mode === "new" ? (fhKey() ? "stkQ" : "stkSym") : "stkQty"); if (fi) fi.focus(); }
+  function stkSearch() {
+    var q = val("stkQ"), box = $("stkRes"); if (!q || !box) return;
+    box.innerHTML = '<p class="small">Cerco…</p>';
+    PF.searchStocks(q, fhKey()).then(function (r) {
+      STK.results = r;
+      if (!$("stkRes")) return;
+      $("stkRes").innerHTML = r.length ? r.map(function (x, i) {
+        return '<button type="button" class="stk-hit" data-w="stk-pick:' + i + '"><span><b>' + esc(niceName(x.name)) + "</b><small>" + esc(x.sym) + (x.us ? "" : " · prezzo a mano") + "</small></span></button>";
+      }).join("") : '<p class="small">Nessuna azione trovata: prova con il ticker, oppure scrivi tu ticker e nome qui sotto.</p>';
+    }).catch(function (e) {
+      if ($("stkRes")) $("stkRes").innerHTML = '<p class="warn-text">' + esc(e && e.code === "key" ? STK_ERR.key : e && e.code === "offline" ? "Sei offline: scrivi tu ticker e nome." : "Finnhub non risponde: scrivi tu ticker e nome.") + "</p>";
+    });
+  }
+  function stkSaveForm() {
+    var f = W.sf, list = stkList(), n = parseQty(val("stkQty")), pRaw = val("stkPrice"), pr = pRaw ? parseQty(pRaw) : null, d = /^\d{4}-\d{2}-\d{2}$/.test(val("stkDate")) ? val("stkDate") : today();
+    blurField();
+    var fail = function (m) { W.sErr = m; W.sf.date = d; var keep = {}; ["stkSym", "stkName", "stkCur", "stkQty", "stkPrice", "stkWhich"].forEach(function (id) { if ($(id)) keep[id] = $(id).value; }); renderWealth(); Object.keys(keep).forEach(function (id) { if ($(id)) $(id).value = keep[id]; }); };
+    if (n === null || n <= 0) return fail("Scrivi quante azioni, con un numero più grande di zero.");
+    if (pRaw && (pr === null || pr <= 0)) return fail("Il prezzo per azione non è un numero valido.");
+    var now = new Date().toISOString(), buy = { id: stkId("o"), date: d, qty: f.sell ? -n : n, price: pr || null, at: now }, name;
+    if (f.mode === "new") {
+      var sym = val("stkSym").toUpperCase().replace(/\s+/g, "");
+      if (!sym) return fail("Scrivi il ticker dell'azione, per esempio AAPL.");
+      var cur = val("stkCur") === "EUR" ? "EUR" : "USD", same = list.filter(function (x) { return x.sym === sym; })[0];
+      name = val("stkName") || sym;
+      if (same) { same = Object.assign({}, same, { buys: (same.buys || []).concat([buy]) }); list = list.map(function (x) { return x.id === same.id ? same : x; }); name = same.name; }
+      else list.push({ id: stkId("s"), sym: sym, name: name, cur: cur, buys: [buy], added: now });
+    } else {
+      var id = val("stkWhich"), S = list.filter(function (x) { return x.id === id; })[0]; if (!S) return fail("Scegli l'azione.");
+      var held = (PF.stocks([S], {}, 1)[0] || {}).qty || 0;
+      if (f.sell && n > held + 1e-9) return fail("Ne hai solo " + nAz(held) + ".");
+      list = list.map(function (x) { return x.id === id ? Object.assign({}, x, { buys: (x.buys || []).concat([buy]) }) : x; });
+      name = S.name;
+    }
+    stkSave(list);
+    W.sf = null; W.sErr = null; W.sMsg = (f.sell ? "Vendita salvata: " : "Acquisto salvato: ") + nAz(n) + " di " + name + (pr ? " a " + stkPx(pr, f.mode === "new" ? cur : (S.cur || "USD")) : "") + ".";
+    renderWealth(); refreshStocks(true);
+  }
+  function setManualPrice(id, v) {
+    var n = parseQty(v), list = stkList().map(function (x) { return x.id === id ? Object.assign({}, x, { manual: n && n > 0 ? { p: n, at: new Date().toISOString() } : null }) : x; });
+    stkSave(list); renderWealth();
+  }
+  function stockAction(k, b) {
+    var p = k.split(":"), cmd = p[0];
+    if (cmd !== "stk-del") W.sDel = null;
+    if (cmd === "setup-stocks") openSettingsAt("set-stocks");
+    else if (cmd === "stk-new") stkOpenForm({ mode: "new" });
+    else if (cmd === "stk-buy") stkOpenForm({ mode: "buy", id: p[1] || null, fixed: !!p[1] });
+    else if (cmd === "stk-sell") stkOpenForm({ mode: "buy", id: p[1], fixed: true, sell: true });
+    else if (cmd === "stk-kind") {
+      W.sf.sell = p[1] === "sell";
+      document.querySelectorAll(".stk-kind button").forEach(function (x) { x.setAttribute("aria-pressed", String(x.dataset.w === k)); });
+      var h3 = document.querySelector(".stk-form h3"); if (h3) h3.textContent = W.sf.sell ? "Vendita" : "Nuovo acquisto";
+    }
+    else if (cmd === "stk-cancel") { blurField(); W.sf = null; W.sErr = null; renderWealth(); }
+    else if (cmd === "stk-save") stkSaveForm();
+    else if (cmd === "stk-search") stkSearch();
+    else if (cmd === "stk-pick") {
+      var x = (STK.results || [])[+p[1]]; if (!x) return;
+      $("stkSym").value = x.sym; $("stkName").value = niceName(x.name); $("stkCur").value = x.us ? "USD" : $("stkCur").value;
+      document.querySelectorAll(".stk-hit").forEach(function (h) { h.setAttribute("aria-pressed", String(h === b)); });
+      $("stkQty").focus();
+    }
+    else if (cmd === "stk-del") {
+      if (W.sDel !== p[1]) { W.sDel = p[1]; renderWealth(); return; }
+      W.sDel = null; delete OPEN["w:s:" + p[1]];
+      stkSave(stkList().filter(function (x) { return x.id !== p[1]; })); W.sMsg = null; renderWealth();
+    }
+    else if (cmd === "stk-bdel") {
+      stkSave(stkList().map(function (x) { return x.id === p[1] ? Object.assign({}, x, { buys: (x.buys || []).filter(function (o) { return o.id !== p[2]; }) }) : x; }));
+      W.sMsg = null; renderWealth();
+    }
+  }
+  /* Impostazioni › Azioni: the Finnhub key */
+  function renderStockKey() {
+    var i = $("fhKey"), s = $("fhStatus"); if (!i || !s) return;
+    if (document.activeElement !== i) i.value = fhKey();
+    var n = stkList().length;
+    s.textContent = !fhKey() ? "Nessuna chiave: i prezzi delle azioni li scrivi a mano." : STK.loading ? "Provo la chiave…" :
+      STK.err ? STK_ERR[STK.err] || STK_ERR.http : n ? "Chiave a posto: prezzi in tempo reale." : "Chiave salvata. Aggiungi un'azione in Patrimonio.";
   }
 
   /* Currencies on the exchanges: tick one to count it as a bank account instead of crypto */
@@ -1323,7 +1518,7 @@
 
   /* Patrimonio settings, in Impostazioni */
   function renderWealthSettings() {
-    renderFiatSettings(); renderYieldSettings();
+    renderFiatSettings(); renderYieldSettings(); renderStockKey();
     var w = wSet(), g = w.giro || {};
     $("wDate").value = w.date || ""; $("wPoste").value = w.date ? (+w.poste || 0) : ""; $("wFineco").value = w.date ? (+w.fineco || 0) : "";
     $("wGiro").value = g.amount !== undefined ? g.amount : ""; $("wGiroDay").value = g.day || 15; $("wFee").value = w.fee !== undefined ? w.fee : "";
@@ -1389,7 +1584,7 @@
   $("drawerClose").addEventListener("click", function () { closeDrawer(true); });
   $("drawerScrim").addEventListener("click", function () { closeDrawer(true); });
   document.querySelectorAll("#drawer button[data-view]").forEach(function (b) { b.addEventListener("click", function () { closeDrawer(false); showView(b.dataset.view); window.scrollTo(0, 0); }); });
-  $("refresh").addEventListener("click", function () { syncFromDrive(true); if (state.view === "crypto" || state.view === "patrimonio") refreshPrices(true); });
+  $("refresh").addEventListener("click", function () { syncFromDrive(true); if (state.view === "crypto" || state.view === "patrimonio") refreshPrices(true); if (state.view === "patrimonio") refreshStocks(true); });
   $("pfBody").addEventListener("click", function (e) {
     var b = e.target.closest("[data-open],[data-pf]"); if (!b) return;
     if (b.dataset.open) {
@@ -1429,7 +1624,8 @@
     }
     var k = b.dataset.w;
     if (k === "back") { W.level = null; renderWealth(); }
-    else if (k === "conti" || k === "etf" || k === "crypto") { W.level = k; renderWealth(); }
+    else if (k === "conti" || k === "etf" || k === "crypto" || k === "azioni") { W.level = k; renderWealth(); }
+    else if (k.indexOf("stk") === 0 || k === "setup-stocks") stockAction(k, b);
     else if (k === "open-crypto") { showView("crypto"); window.scrollTo(0, 0); }
     else if (k === "etf-buy") { W.buyEtf = true; W.editEtf = false; W.buyErr = null; W.bought = null; renderWealth(); var fi = document.querySelector("#wBody input[data-buy]"); if (fi) fi.focus(); }
     else if (k === "etf-buy-save") saveEtfBuy();
@@ -1442,7 +1638,13 @@
   $("wBody").addEventListener("change", function (e) {
     var t = e.target, w = wSet();
     if (t.dataset.topup) { var skip = Object.assign({}, w.topupSkip || {}); if (t.checked) delete skip[t.dataset.topup]; else skip[t.dataset.topup] = true; saveWealth({ topupSkip: skip }); renderWealth(); }
+    else if (t.dataset.stkman) setManualPrice(t.dataset.stkman, t.value);
     else if (t.dataset.etf) { var n = parseQty(t.value), etf = Object.assign({}, w.etf || {}); etf[t.dataset.etf] = { qty: n === null ? 0 : n, at: new Date().toISOString() }; saveWealth({ etf: etf }); renderWealth(); }
+  });
+  $("wBody").addEventListener("keydown", function (e) {
+    if (e.key !== "Enter" || !e.target.id || e.target.id.indexOf("stk") !== 0) return;
+    e.preventDefault();
+    if (e.target.id === "stkQ") stkSearch(); else if (e.target.id === "stkQty" || e.target.id === "stkPrice") stockAction("stk-save");
   });
   $("wBody").addEventListener("focusout", function () { setTimeout(function () { if (W.dirty && !editingIn($("wBody")) && state.view === "patrimonio") renderWealth(); }, 0); });
   /* Highlight a slice from its legend row, and the other way round */
@@ -1471,6 +1673,17 @@
     var on = Object.assign({}, wSet().asBank || {});
     if (e.target.checked) on[k] = true; else delete on[k];
     saveWealth({ asBank: on }); renderFiatSettings(); renderYieldSettings();
+  });
+  $("fhKey").addEventListener("change", function () {
+    var k = this.value.trim(); this.value = k;
+    saveWealth({ fhKey: k }); STK.err = null;
+    if (k && stkList().length) refreshStocks(true);
+    else if (k) {
+      // a quick check of the key with a well-known ticker
+      STK.loading = true; renderStockKey();
+      PF.fetchStocks(["AAPL"], k).then(function () { STK.err = null; }).catch(function (e) { STK.err = (e && e.code) || "http"; }).then(function () { STK.loading = false; renderStockKey(); });
+    }
+    renderStockKey();
   });
   $("wYield").addEventListener("change", function (e) {
     var k = e.target.dataset && e.target.dataset.yk, f = e.target.dataset && e.target.dataset.yf; if (!k || !f) return;
@@ -1505,6 +1718,7 @@
     if (document.visibilityState !== "visible" || (state.view !== "crypto" && state.view !== "patrimonio")) return;
     if (Date.now() - state.pf.checkedAt > 10 * 60000) syncPortfolio();
     refreshPrices(false);
+    if (state.view === "patrimonio") refreshStocks(false);
   });
   $("monthSel").addEventListener("change", function () { state.month = this.value; renderMonth(); });
   $("monPrev").addEventListener("click", function () { stepMonth(-1); });
